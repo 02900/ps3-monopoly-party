@@ -156,13 +156,19 @@ static void draw_hud(const GameState &s, int playerCount) {
 
     int active = s.get_active_player_index();
     for (int p = 0; p < playerCount; ++p) {
-        char line[64];
-        std::snprintf(line, sizeof line, "%s P%d   $%d",
-                      p == active ? ">" : " ", p + 1, s.get_player_funds(p));
-        text(HX, y, line, PLAYER_COL[p], 13, 20);
+        char line[80];
+        const char *tag = s.get_player_eliminated(p) ? " OUT"
+                        : s.get_player_turns_remaining_in_jail(p) > 0 ? " JAIL" : "";
+        std::snprintf(line, sizeof line, "%s P%d   $%d%s",
+                      p == active ? ">" : " ", p + 1, s.get_player_funds(p), tag);
+        text(HX, y, line, s.get_player_eliminated(p) ? 0xff777777 : PLAYER_COL[p], 13, 20);
         y += 26;
     }
-    y += 10;
+    y += 6;
+
+    char onl[48];
+    std::snprintf(onl, sizeof onl, "On: %s", to_string(s.get_player_position(active)).c_str());
+    text(HX, y, onl, 0xffB0BEC5, 12, 18); y += 26;
 
     std::pair<int,int> d = s.get_last_dice_roll();
     if (d.first > 0) {
@@ -200,10 +206,23 @@ static const int OV_Y = BOARD_Y0 + 3 * CELL;
 static const int OV_W = CELL * 9 - 12;
 static const int OV_H = CELL * 4;
 
-static void draw_overlay_bg(const GameState &s) {
+// The controlling player is taking a turn from inside jail.
+static bool jailed_turn(const GameState &s) {
+    return s.get_turn_phase() == TurnPhase::WaitingForRoll &&
+           s.get_player_turns_remaining_in_jail(s.get_controlling_player_index()) > 0;
+}
+
+static bool overlay_active(const GameState &s) {
     TurnPhase ph = s.get_turn_phase();
-    if (ph != TurnPhase::WaitingForBuyPropertyInput && ph != TurnPhase::WaitingForBids)
-        return;
+    return s.is_game_over() ||
+           ph == TurnPhase::WaitingForBuyPropertyInput ||
+           ph == TurnPhase::WaitingForBids ||
+           ph == TurnPhase::WaitingForDebtSettlement ||
+           jailed_turn(s);
+}
+
+static void draw_overlay_bg(const GameState &s) {
+    if (!overlay_active(s)) return;
     fill_rect(OV_X - 2, OV_Y - 2, OV_W + 4, OV_H + 4, 0xffF5F0E1);   // border
     fill_rect(OV_X,     OV_Y,     OV_W,     OV_H,     0xff1B2A38);   // panel
 }
@@ -212,10 +231,47 @@ static void draw_overlay_fg(const GameState &s, int bidAmount) {
     const int tx = OV_X + 16;
     int ty = OV_Y + 14;
     const int c = s.get_controlling_player_index();
+    char l[80];
+
+    if (s.is_game_over()) {
+        int w = -1;
+        for (int i = 0; i < s.get_player_count(); ++i)
+            if (!s.get_player_eliminated(i)) { w = i; break; }
+        text(tx, ty, "GAME OVER", 0xffFFFFFF, 16, 26); ty += 40;
+        if (w >= 0) {
+            std::snprintf(l, sizeof l, "PLAYER %d WINS!", w + 1);
+            text(tx, ty, l, PLAYER_COL[w], 16, 26);
+        }
+        return;
+    }
+
+    if (s.get_turn_phase() == TurnPhase::WaitingForDebtSettlement) {
+        int deficit = -s.get_player_funds(c);   // funds are negative while settling
+        std::snprintf(l, sizeof l, "P%d IN DEBT", c + 1);
+        text(tx, ty, l, 0xffE57373, 15, 24); ty += 32;
+        std::snprintf(l, sizeof l, "Must raise $%d", deficit > 0 ? deficit : 0);
+        text(tx, ty, l, 0xffFFFFFF, 14, 22); ty += 32;
+        text(tx, ty, "L2 mortgage/sell", 0xff9FE6A0, 13, 20); ty += 26;
+        text(tx, ty, "O = declare bankruptcy", 0xffE57373, 12, 18);
+        return;
+    }
+
+    if (jailed_turn(s)) {
+        int turns = s.get_player_turns_remaining_in_jail(c);
+        bool canBail = s.check_if_player_is_allowed_to_pay_bail(c);
+        bool hasCard = !s.get_player_get_out_of_jail_free_cards(c).empty();
+        std::snprintf(l, sizeof l, "P%d IN JAIL", c + 1);
+        text(tx, ty, l, 0xffFFE082, 15, 24); ty += 30;
+        std::snprintf(l, sizeof l, "Rolls left: %d", turns);
+        text(tx, ty, l, 0xffFFFFFF, 13, 20); ty += 28;
+        text(tx, ty, "X = roll for doubles", 0xff9FE6A0, 12, 18); ty += 22;
+        if (canBail) { text(tx, ty, "Sq = pay $50 bail", 0xff9FE6A0, 12, 18); ty += 22; }
+        if (hasCard) { text(tx, ty, "Tri = use jail card", 0xff9FE6A0, 12, 18); }
+        return;
+    }
 
     if (s.get_turn_phase() == TurnPhase::WaitingForBuyPropertyInput) {
         Property prop = space_to_property(s.get_player_position(s.get_active_player_index()));
-        char l[80];
         std::snprintf(l, sizeof l, "P%d landed on", c + 1);
         text(tx, ty, l, 0xffFFFFFF, 13, 20); ty += 30;
         text(tx, ty, to_string(prop).c_str(), 0xffFFE082, 15, 24); ty += 34;
@@ -228,7 +284,6 @@ static void draw_overlay_fg(const GameState &s, int bidAmount) {
     } else if (s.get_turn_phase() == TurnPhase::WaitingForBids) {
         Auction a = s.get_current_auction();
         Property ap = a.property;
-        char l[80];
         std::snprintf(l, sizeof l, "AUCTION: %s", monopoly::to_string(ap).c_str());
         text(tx, ty, l, 0xffFFE082, 14, 22); ty += 30;
         std::snprintf(l, sizeof l, "High bid: $%d", a.highestBid);
@@ -375,7 +430,8 @@ int main(void) {
         // outside mid-decision phases (build/mortgage are rejected there anyway).
         const bool mgmtAllowed = !over &&
             (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd ||
-             ph == TurnPhase::WaitingForAcquisitionManagement);
+             ph == TurnPhase::WaitingForAcquisitionManagement ||
+             ph == TurnPhase::WaitingForDebtSettlement);   // raise cash to pay a debt
         if (eL2) mgmtOpen = mgmtOpen ? 0 : (mgmtAllowed ? 1 : 0);
         if (mgmtOpen && !mgmtAllowed) mgmtOpen = 0;
 
@@ -404,7 +460,14 @@ int main(void) {
             int advanced = 0;
             switch (ph) {
                 case TurnPhase::WaitingForRoll:
-                    if (eX) { iface.roll_dice(c); advanced = 1; audio_play_blip(); }
+                    if (s.get_player_turns_remaining_in_jail(c) > 0) {
+                        // jailed: roll for doubles, pay bail, or use a jail card
+                        if (eX)        { iface.roll_dice(c);                     advanced = 1; audio_play_blip(); }
+                        else if (eSq)  { iface.pay_bail(c);                      advanced = 1; }
+                        else if (eTri) { iface.use_get_out_of_jail_free_card(c); advanced = 1; }
+                    } else if (eX) {
+                        iface.roll_dice(c); advanced = 1; audio_play_blip();
+                    }
                     break;
                 case TurnPhase::WaitingForTurnEnd:
                     if (eX) { iface.end_turn(c); advanced = 1; }
@@ -428,9 +491,12 @@ int main(void) {
                     else if (eO) { iface.decline_bid(c);    bidAmount = 0; advanced = 1; }
                     break;
                 }
+                case TurnPhase::WaitingForDebtSettlement:
+                    // raise cash via L2 (mgmtAllowed); O declares bankruptcy
+                    if (eO) { iface.resign(c); advanced = 1; }
+                    break;
                 // auto-resolved for now (interactive UI in later milestones):
                 case TurnPhase::WaitingForAcquisitionManagement: iface.end_turn(c);      advanced = 1; break;
-                case TurnPhase::WaitingForDebtSettlement:        iface.resign(c);        advanced = 1; break;
                 case TurnPhase::WaitingForTradeOfferResponse:    iface.decline_trade(c); advanced = 1; break;
                 default: break;
             }

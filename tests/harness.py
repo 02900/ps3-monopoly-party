@@ -156,6 +156,18 @@ class PS3Client:
     def usejail(self):
         return self.send("usejail")
 
+    def resign(self):
+        return self.send("resign")
+
+    def givejailcard(self, p, deck):
+        return self.send(f"givejailcard {p} {deck}")
+
+    def stackcard(self, deck, key):
+        return self.send(f"stackcard {deck} {key}")
+
+    def drawcard(self, p, deck):
+        return self.send(f"drawcard {p} {deck}")
+
     # -- deterministic setup (force_*) ----------------------------------------
     def setfunds(self, p, amount):
         return self.send(f"setfunds {p} {amount}")
@@ -171,6 +183,9 @@ class PS3Client:
 
     def gojail(self, p):
         return self.send(f"gojail {p}")
+
+    def startturn(self, p):
+        return self.send(f"startturn {p}")
 
     def land(self, p, space):
         return self.send(f"land {p} {space}")

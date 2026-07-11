@@ -50,6 +50,24 @@ Property prop_at(int idx) {
     return space_to_property(index_to_space(idx));
 }
 
+DeckType deck_from_str(const std::string& s, bool& ok) {
+    ok = true;
+    if (s == "chance") return DeckType::Chance;
+    if (s == "cc" || s == "communitychest") return DeckType::CommunityChest;
+    ok = false;
+    return DeckType::Chance;
+}
+
+// A small subset of cards, enough for deterministic card-effect tests.
+bool card_from_key(const std::string& k, Card& out) {
+    if (k == "Chance_AdvanceToGo")       { out = Card::Chance_AdvanceToGo;       return true; }
+    if (k == "Chance_GoToJail")          { out = Card::Chance_GoToJail;          return true; }
+    if (k == "Chance_Gain50")            { out = Card::Chance_Gain50;            return true; }
+    if (k == "CommunityChest_Gain200")   { out = Card::CommunityChest_Gain200;   return true; }
+    if (k == "CommunityChest_Pay50")     { out = Card::CommunityChest_Pay50;     return true; }
+    return false;
+}
+
 const char* phase_name(TurnPhase p) {
     switch (p) {
         case TurnPhase::WaitingForRoll:                  return "roll";
@@ -168,6 +186,20 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
         if (t.size() < 2 || !valid_player(s, as_int(t[1]))) return err("player");
         return std::to_string(s.get_player_turns_remaining_in_jail(as_int(t[1])));
     }
+    if (op == "eliminated") {
+        if (t.size() < 2 || !valid_player(s, as_int(t[1]))) return err("player");
+        return s.get_player_eliminated(as_int(t[1])) ? "1" : "0";
+    }
+    if (op == "jailcards") {   // count of get-out-of-jail-free cards held
+        if (t.size() < 2 || !valid_player(s, as_int(t[1]))) return err("player");
+        return std::to_string((int) s.get_player_get_out_of_jail_free_cards(as_int(t[1])).size());
+    }
+    if (op == "winner") {
+        if (!s.is_game_over()) return "-1";
+        for (int i = 0; i < s.get_player_count(); ++i)
+            if (!s.get_player_eliminated(i)) return std::to_string(i);
+        return "-1";
+    }
 
     // ---- driving (push an Input, then advance) ----
     if (op == "newgame") { game.reset(); return "ok"; }
@@ -184,6 +216,7 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
     if (op == "endturn") { iface.end_turn(controlling);       game.process(); return "ok"; }
     if (op == "paybail") { iface.pay_bail(controlling);       game.process(); return "ok"; }
     if (op == "usejail") { iface.use_get_out_of_jail_free_card(controlling); game.process(); return "ok"; }
+    if (op == "resign")  { iface.resign(controlling);         game.process(); return "ok"; }
     if (op == "mortgage" || op == "unmortgage" || op == "build" || op == "sell") {
         if (t.size() < 2) return err("args");
         Property p = prop_at(as_int(t[1]));
@@ -221,9 +254,29 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
         if (t.size() < 2 || !valid_player(s, as_int(t[1]))) return err("player");
         s.force_go_to_jail(as_int(t[1])); game.set_state(s); return "ok";
     }
+    if (op == "startturn") {   // make it player p's turn (WaitingForRoll)
+        if (t.size() < 2 || !valid_player(s, as_int(t[1]))) return err("player");
+        s.force_start_turn(as_int(t[1])); game.set_state(s); return "ok";
+    }
     if (op == "land") {   // force player p to LAND on a space (applies rent/effects)
         if (t.size() < 3 || !valid_player(s, as_int(t[1]))) return err("args");
         s.force_land(as_int(t[1]), index_to_space(as_int(t[2]))); game.set_state(s); return "ok";
+    }
+    if (op == "givejailcard") {   // give player p a get-out-of-jail-free card (chance|cc)
+        if (t.size() < 3 || !valid_player(s, as_int(t[1]))) return err("args");
+        bool ok; DeckType d = deck_from_str(t[2], ok); if (!ok) return err("deck");
+        s.force_give_get_out_of_jail_free_card(as_int(t[1]), d); game.set_state(s); return "ok";
+    }
+    if (op == "stackcard") {   // put a specific card on top of a deck (chance|cc)
+        if (t.size() < 3) return err("args");
+        bool ok; DeckType d = deck_from_str(t[1], ok); if (!ok) return err("deck");
+        Card card; if (!card_from_key(t[2], card)) return err("card");
+        s.force_stack_deck(d, DeckContainer{card}); game.set_state(s); return "ok";
+    }
+    if (op == "drawcard") {   // player p draws the top card of a deck (chance|cc) and applies it
+        if (t.size() < 3 || !valid_player(s, as_int(t[1]))) return err("args");
+        bool ok; DeckType d = deck_from_str(t[2], ok); if (!ok) return err("deck");
+        s.force_draw_card(as_int(t[1]), d); game.set_state(s); return "ok";
     }
 
     return err("unknown '" + op + "'");
