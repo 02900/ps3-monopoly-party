@@ -4,6 +4,7 @@
 #include "clay_renderer.h"
 #include "ui.h"
 #include "ui_internal.h"
+#include "theme.h"
 #include <stdarg.h>
 
 // Rotating scratch for runtime-formatted labels: a Clay_String points into one of
@@ -35,7 +36,8 @@ static void hud_player_row(const UiSnapshot *s, int p) {
             .layout = { .sizing = { CLAY_SIZING_FIXED(16), CLAY_SIZING_FIXED(16) } },
             .backgroundColor = s->eliminated[p] ? ui_rgba(0x555555ff) : ui_player_color(p)
         }) {}
-        TXT(fmtl("P%d", p + 1), s->eliminated[p] ? UI_TEXT_MUTE : UI_TEXT, 18);
+        TXT(fmtl("P%d %s", p + 1, ui_token_name(s->tokenTheme, p)),
+            s->eliminated[p] ? UI_TEXT_MUTE : UI_TEXT, 16);
         TXT(fmtl("$%d", s->funds[p]), UI_ACCENT, 18);
         if (s->eliminated[p]) TXT("OUT", UI_BAD, 14);
         else if (s->jailed[p] > 0) TXT("JAIL", ui_rgba(0xFFD54Fff), 14);

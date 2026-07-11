@@ -31,6 +31,7 @@ enum { UI_PHASE_ROLL, UI_PHASE_BUY, UI_PHASE_BIDS, UI_PHASE_MANAGE,
 
 typedef struct {
     int  count;                 // players in the match (2..4)
+    int  tokenTheme;            // chosen token theme (UI_THEME_*)
     int  funds[4];
     int  netWorth[4];
     int  jailed[4];             // turns remaining in jail (0 = free)
@@ -60,6 +61,9 @@ typedef struct {
 
 // Create Clay's arena + text-measure callback. Call once, after ya2d + ttf init.
 void ui_init(int screen_w, int screen_h);
+
+// Load any embedded image assets (stub until the art pass; safe no-op).
+void ui_images_load(void);
 
 // Clear + enable alpha blending + 2D projection. Call at the top of every frame,
 // before drawing the board and before the Clay render (blending is required so TTF

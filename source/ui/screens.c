@@ -5,14 +5,16 @@
 #include "clay_nav.h"
 #include "ui.h"
 #include "ui_internal.h"
+#include "theme.h"
 
 enum { SCR_TITLE, SCR_MENU, SCR_SETUP, SCR_HOWTO };
 
 static int           g_screen = SCR_TITLE;
 static int           g_inGame = 0;
+static int           g_theme  = UI_THEME_CLASSIC;   // chosen token theme
 static ClayNav       g_nav;
 static ClayNavRepeat g_repV, g_repH;
-static UiGameConfig  g_cfg = { 4, { 0, 1, 2, 3 }, { 0, 1, 2, 3 } };
+static UiGameConfig  g_cfg = { 4, { 0, 0, 0, 0 }, { 0, 1, 2, 3 } };
 
 int  ui_in_menu(void)   { return !g_inGame; }
 void ui_goto_menu(void) { g_inGame = 0; g_screen = SCR_MENU; g_nav.has_focus = 0; }
@@ -112,10 +114,30 @@ static void build_setup(int hdir, int cross, UiAction *result) {
                       CLAY_TEXT_CONFIG({ .textColor = pf ? UI_TEXT : UI_TEXT_DIM, .fontSize = 22 }));
         }
 
+        // Theme row (focusable; Left/Right cycle the token theme)
+        char themerow[40];
+        snprintf(themerow, sizeof themerow, "Theme:   < %s >", ui_theme_name(g_theme));
+        clay_nav_add(&g_nav, CLAY_ID("SetupTheme"));
+        int tf = clay_nav_is_focused(&g_nav, CLAY_ID("SetupTheme"));
+        if (tf) {
+            if (hdir == CLAY_NAV_LEFT)  g_theme = (g_theme + UI_THEME_COUNT - 1) % UI_THEME_COUNT;
+            if (hdir == CLAY_NAV_RIGHT) g_theme = (g_theme + 1) % UI_THEME_COUNT;
+        }
+        CLAY(CLAY_ID("SetupTheme"), {
+            .layout = { .sizing = { CLAY_SIZING_FIXED(340), CLAY_SIZING_FIXED(46) },
+                        .padding = CLAY_PADDING_ALL(10),
+                        .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+            .backgroundColor = tf ? UI_ROW_FOCUS : UI_ROW,
+            .border = { .color = UI_ACCENT, .width = CLAY_BORDER_OUTSIDE(tf ? 2 : 0) }
+        }) {
+            CLAY_TEXT(ui_str(themerow),
+                      CLAY_TEXT_CONFIG({ .textColor = tf ? UI_TEXT : UI_TEXT_DIM, .fontSize = 22 }));
+        }
+
         if (menu_item(CLAY_ID("SetupStart"), "Start Game", cross)) *result = UI_ACT_START_GAME;
 
         CLAY(CLAY_ID("SetupGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(10) } } }) {}
-        hint("Left/Right: players    X: start    O: back");
+        hint("Left/Right: change    X: start    O: back");
     }
 }
 
@@ -166,6 +188,9 @@ UiAction ui_menu_frame(int hUp, int hDown, int hLeft, int hRight,
     Clay_RenderCommandArray cmds = Clay_EndLayout(0.0f);
     clay_render(cmds);
 
-    if (result == UI_ACT_START_GAME) { g_inGame = 1; *cfg = g_cfg; }
+    if (result == UI_ACT_START_GAME) {
+        for (int p = 0; p < 4; ++p) { g_cfg.theme[p] = g_theme; g_cfg.token[p] = p; }
+        g_inGame = 1; *cfg = g_cfg;
+    }
     return result;
 }

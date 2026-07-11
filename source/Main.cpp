@@ -304,6 +304,7 @@ int main(void) {
     TTFLoadFont(0, (char *)"/dev_flash/data/font/SCE-PS3-RD-R-LATIN.TTF", NULL, 0);
 
     ui_init(SCREEN_W, SCREEN_H);        // Clay arena + text-measure callback
+    ui_images_load();                   // embedded art (stub until the asset pass)
 
     // Release builds seed the dice RNG from the clock so each session differs; the
     // NETTEST build keeps a fixed seed so the e2e suite stays deterministic.
@@ -336,6 +337,7 @@ int main(void) {
     int tradeTarget = 1;           // player we're offering to
     int tradeDeedSel = 0;          // which of our deeds we offer
     int tradeCash = 100;           // cash we request in return
+    int gameTheme = 0;             // token theme chosen in setup (UI_THEME_*)
 
     while (g_running) {
         sysUtilCheckCallback();
@@ -384,6 +386,7 @@ int main(void) {
                 ifacep = new mp::PS3Interface(cfg.playerCount, seed);
                 gamep  = new Game(ifacep);
                 gamep->process();
+                gameTheme = cfg.theme[0];
                 paused = mgmtOpen = tradeOpen = 0;
             } else if (act == UI_ACT_QUIT) {
                 g_running = 0;
@@ -530,6 +533,7 @@ int main(void) {
         UiSnapshot snap;
         fill_snapshot(snap, s, iface.player_count(), mgmtOpen, mgmtSel,
                       tradeOpen, tradeTarget, tradeDeedSel, tradeCash, bidAmount, paused);
+        snap.tokenTheme = gameTheme;
 
         ui_begin_frame(CLEAR);
         draw_board(s, iface.player_count());     // raw scene, under the Clay UI
