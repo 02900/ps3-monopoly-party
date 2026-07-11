@@ -82,17 +82,24 @@ static u32 group_color(PropertyGroup g) {
     }
 }
 
+// NOTE: tiny3d_VertexColor and display_ttf_string take colours as RGBA
+// (0xRRGGBBAA) — unlike tiny3d_Clear, which is ARGB. Our colour constants are
+// written as opaque ARGB (0xffRRGGBB) for readability; argb_to_rgba() reorders
+// them at the point of use so both formats coexist.
+static inline u32 argb_to_rgba(u32 argb) { return (argb << 8) | 0xff; }
+
 static void fill_rect(int x, int y, int w, int h, u32 color) {
+    u32 c = argb_to_rgba(color);
     tiny3d_SetPolygon(TINY3D_QUADS);
-    tiny3d_VertexPos(x,     y,     0); tiny3d_VertexColor(color);
-    tiny3d_VertexPos(x + w, y,     0); tiny3d_VertexColor(color);
-    tiny3d_VertexPos(x + w, y + h, 0); tiny3d_VertexColor(color);
-    tiny3d_VertexPos(x,     y + h, 0); tiny3d_VertexColor(color);
+    tiny3d_VertexPos(x,     y,     0); tiny3d_VertexColor(c);
+    tiny3d_VertexPos(x + w, y,     0); tiny3d_VertexColor(c);
+    tiny3d_VertexPos(x + w, y + h, 0); tiny3d_VertexColor(c);
+    tiny3d_VertexPos(x,     y + h, 0); tiny3d_VertexColor(c);
     tiny3d_End();
 }
 
 static void text(int x, int y, const char *s, u32 color, int sw, int sh) {
-    display_ttf_string(x, y, s, color, 0, sw, sh);
+    display_ttf_string(x, y, s, argb_to_rgba(color), 0, sw, sh);
 }
 
 // ---- rendering -------------------------------------------------------------
@@ -108,8 +115,6 @@ static void draw_board(const GameState &s, int playerCount) {
             col = group_color(property_group(space_to_property(sp)));
         fill_rect(x + 1, y + 1, CELL - 2, CELL - 2, col);
     }
-    // centre panel background
-    fill_rect(BOARD_X0 + CELL, BOARD_Y0 + CELL, CELL * 9, CELL * 9, 0xff17313F);
 
     // tokens (2x2 cluster inside the owner's square)
     for (int p = 0; p < playerCount; ++p) {
@@ -123,10 +128,10 @@ static void draw_board(const GameState &s, int playerCount) {
 }
 
 static void draw_hud(const GameState &s, int playerCount) {
-    const int HX = BOARD_X0 + CELL + 12;   // inside the centre panel
-    int y = BOARD_Y0 + CELL + 14;
+    const int HX = BOARD_X0 + 11 * CELL + 18;   // right of the board, in the free area
+    int y = 40;
 
-    text(HX, y, "MONOPOLY PARTY", 0xffFFFFFF, 16, 22); y += 40;
+    text(HX, y, "MONOPOLY PARTY", 0xffFFFFFF, 15, 22); y += 40;
 
     int active = s.get_active_player_index();
     for (int p = 0; p < playerCount; ++p) {
@@ -156,7 +161,7 @@ static void draw_hud(const GameState &s, int playerCount) {
     }
     char pl[80];
     std::snprintf(pl, sizeof pl, "P%d: %s", s.get_controlling_player_index() + 1, prompt);
-    text(HX, y, pl, 0xffFFE082, 14, 22);
+    text(HX, y, pl, 0xffFFE082, 12, 18);
 }
 
 // ---- main ------------------------------------------------------------------
