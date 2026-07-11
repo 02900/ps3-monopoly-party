@@ -195,8 +195,10 @@ static void draw_hud(const GameState &s, int playerCount) {
 
     TurnPhase ph = s.get_turn_phase();
     if (!s.is_game_over() &&
-        (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd))
-        text(HX, y, "L2 = manage properties", 0xff8FB6C9, 11, 16);
+        (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd)) {
+        text(HX, y, "L2 = manage   Tri = trade", 0xff8FB6C9, 11, 16); y += 20;
+        text(HX, y, "Start = pause", 0xff8FB6C9, 11, 16);
+    }
 }
 
 // ---- interactive overlays (buy / auction) ---------------------------------
@@ -219,7 +221,19 @@ static bool overlay_active(const GameState &s) {
            ph == TurnPhase::WaitingForBuyPropertyInput ||
            ph == TurnPhase::WaitingForBids ||
            ph == TurnPhase::WaitingForDebtSettlement ||
+           ph == TurnPhase::WaitingForTradeOfferResponse ||
            jailed_turn(s);
+}
+
+// Compact one-line summary of a trade side (what a Promise contains).
+static void promise_summary(const monopoly::Promise &pr, char *out, int cap) {
+    int n = 0;
+    if (pr.cash > 0) n += std::snprintf(out + n, cap - n, "$%d ", pr.cash);
+    for (Property d : pr.deeds) {
+        if (n >= cap - 1) break;
+        n += std::snprintf(out + n, cap - n, "%s ", to_string(d).c_str());
+    }
+    if (n == 0) std::snprintf(out, cap, "nothing");
 }
 
 static void draw_overlay_bg(const GameState &s) {
@@ -254,6 +268,20 @@ static void draw_overlay_fg(const GameState &s, int bidAmount) {
         text(tx, ty, l, 0xffFFFFFF, 14, 22); ty += 32;
         text(tx, ty, "L2 mortgage/sell", 0xff9FE6A0, 13, 20); ty += 26;
         text(tx, ty, "O = declare bankruptcy", 0xffE57373, 12, 18);
+        return;
+    }
+
+    if (s.get_turn_phase() == TurnPhase::WaitingForTradeOfferResponse) {
+        Trade tr = s.get_pending_trade_offer();
+        char give[64], get[64];
+        promise_summary(tr.offer, give, sizeof give);          // what the offerer gives you
+        promise_summary(tr.consideration, get, sizeof get);    // what they want from you
+        std::snprintf(l, sizeof l, "P%d offers you:", tr.offeringPlayer + 1);
+        text(tx, ty, l, 0xffFFE082, 14, 22); ty += 30;
+        text(tx, ty, give, 0xff9FE6A0, 13, 20); ty += 28;
+        text(tx, ty, "in exchange for:", 0xffFFFFFF, 13, 20); ty += 26;
+        text(tx, ty, get, 0xffE0B0B0, 13, 20); ty += 30;
+        text(tx, ty, "X = Accept   O = Decline", 0xff9FE6A0, 13, 20);
         return;
     }
 
@@ -363,6 +391,44 @@ static void draw_mgmt_fg(const GameState &s, int sel) {
     text(tx, ty, "X Mortgage toggle   L2/O Close", 0xff9FE6A0, 11, 16);
 }
 
+// ---- trade builder (Triangle) ---------------------------------------------
+// Offer one of your deeds to another player in exchange for cash.
+static int next_other_player(const GameState &s, int from, int self) {
+    int n = s.get_player_count();
+    for (int k = 1; k <= n; ++k) {
+        int cand = (from + k) % n;
+        if (cand != self && !s.get_player_eliminated(cand)) return cand;
+    }
+    return self;
+}
+
+static void draw_trade_bg() { draw_mgmt_bg(); }   // same panel
+
+static void draw_trade_fg(const GameState &s, int me, int target, int deedSel, int cash) {
+    std::vector<Property> deeds = deeds_of(s, me);
+    const int tx = MG_X + 12;
+    int ty = MG_Y + 14;
+    char l[80];
+
+    text(tx, ty, "OFFER TRADE", 0xffFFFFFF, 15, 24); ty += 36;
+    if (deeds.empty()) {
+        text(tx, ty, "(you have no deeds to offer)", 0xffCCCCCC, 13, 20);
+        return;
+    }
+    if (deedSel < 0) deedSel = 0;
+    if (deedSel >= (int) deeds.size()) deedSel = (int) deeds.size() - 1;
+    std::snprintf(l, sizeof l, "Give: %s", to_string(deeds[deedSel]).c_str());
+    text(tx, ty, l, 0xff9FE6A0, 14, 22); ty += 24;
+    text(tx, ty, "   (Lt/Rt)", 0xff888888, 11, 16); ty += 30;
+    std::snprintf(l, sizeof l, "To:  P%d", target + 1);
+    text(tx, ty, l, PLAYER_COL[target], 14, 22); ty += 24;
+    text(tx, ty, "   (Square)", 0xff888888, 11, 16); ty += 30;
+    std::snprintf(l, sizeof l, "Ask: $%d", cash);
+    text(tx, ty, l, 0xffE0B0B0, 14, 22); ty += 24;
+    text(tx, ty, "   (Up/Dn +-50)", 0xff888888, 11, 16); ty += 34;
+    text(tx, ty, "X = Send    O = Cancel", 0xff9FE6A0, 13, 20);
+}
+
 // ---- main ------------------------------------------------------------------
 static padInfo  pad_info;
 static padData  pad_data;
@@ -403,6 +469,10 @@ int main(void) {
     int mgmtOpen  = 0;             // property-management (L2) window open?
     int mgmtSel   = 0;             // selected deed row in that window
     int paused    = 0;             // pause menu open?
+    int tradeOpen = 0;             // trade builder (Triangle) open?
+    int tradeTarget = 1;           // player we're offering to
+    int tradeDeedSel = 0;          // which of our deeds we offer
+    int tradeCash = 100;           // cash we request in return
 
     while (g_running) {
         sysUtilCheckCallback();
@@ -469,6 +539,13 @@ int main(void) {
         if (eL2) mgmtOpen = mgmtOpen ? 0 : (mgmtAllowed ? 1 : 0);
         if (mgmtOpen && !mgmtAllowed) mgmtOpen = 0;
 
+        // Trade builder is available on your own (non-jailed) turn when you hold a deed.
+        const bool tradeAllowed = !over && !mgmtOpen &&
+            (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd) &&
+            s.get_player_turns_remaining_in_jail(c) == 0 &&
+            s.get_players_remaining_count() > 1 && !deeds_of(s, c).empty();
+        if (tradeOpen && !tradeAllowed) tradeOpen = 0;
+
         if (mgmtOpen) {
             // ---- management window drives the pad ----
             std::vector<Property> deeds = deeds_of(s, c);
@@ -489,6 +566,33 @@ int main(void) {
                 if (advanced) { game.process(); audio_play_blip(); }
             }
             if (eO) mgmtOpen = 0;
+        } else if (tradeOpen) {
+            // ---- trade builder drives the pad ----
+            std::vector<Property> deeds = deeds_of(s, c);
+            int nd = (int) deeds.size();
+            if (eSq) tradeTarget = next_other_player(s, tradeTarget, c);
+            if (nd > 0) {
+                if (eLt && tradeDeedSel > 0)      tradeDeedSel--;
+                if (eRt && tradeDeedSel < nd - 1) tradeDeedSel++;
+                if (tradeDeedSel >= nd) tradeDeedSel = nd - 1;
+            }
+            if (eUp) tradeCash += 50;
+            if (eDn) { tradeCash -= 50; if (tradeCash < 0) tradeCash = 0; }
+            if (eX && nd > 0) {
+                Trade tr;
+                tr.offeringPlayer    = c;
+                tr.consideringPlayer = tradeTarget;
+                tr.offer.deeds.insert(deeds[tradeDeedSel]);
+                tr.consideration.cash = tradeCash;
+                iface.propose_trade(tr); game.process();
+                tradeOpen = 0; audio_play_blip();
+            }
+            if (eO) tradeOpen = 0;
+        } else if (eTri && tradeAllowed) {
+            // Triangle opens the trade builder (jail's Triangle=use-card is gated out
+            // by tradeAllowed, so the two never clash)
+            tradeOpen = 1; tradeTarget = next_other_player(s, c, c);
+            tradeDeedSel = 0; tradeCash = 100;
         } else if (!over) {
             // ---- normal turn controls ----
             int advanced = 0;
@@ -553,14 +657,17 @@ int main(void) {
         tiny3d_Project2D();
 
         draw_board(s, iface.player_count());
-        if (mgmtOpen) draw_mgmt_bg();
-        else          draw_overlay_bg(s);
+        if (mgmtOpen)       draw_mgmt_bg();
+        else if (tradeOpen) draw_trade_bg();
+        else                draw_overlay_bg(s);
 
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
         draw_hud(s, iface.player_count());
-        if (mgmtOpen) draw_mgmt_fg(s, mgmtSel);
-        else          draw_overlay_fg(s, bidAmount);
+        if (mgmtOpen)       draw_mgmt_fg(s, mgmtSel);
+        else if (tradeOpen) draw_trade_fg(s, s.get_controlling_player_index(),
+                                          tradeTarget, tradeDeedSel, tradeCash);
+        else                draw_overlay_fg(s, bidAmount);
 
         tiny3d_Flip();
         audio_update();

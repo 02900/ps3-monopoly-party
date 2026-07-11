@@ -1,115 +1,70 @@
-# PS3 Tiny3D Boilerplate
+# Monopoly Party — PS3
 
-> **📋 GitHub template repo** — click **“Use this template”** (or
-> `gh repo create my-game --template 02900/ps3-boilerplate-tiny3d`) to start a new PS3
-> homebrew project from this scaffold: Dockerized toolchain, Makefile, CI, PKG packaging
-> and the shared [`ps3-homebrew-skills`](https://github.com/02900/ps3-homebrew-skills)
-> submodule already wired.
+A PS3 homebrew **Monopoly** for 2–4 players (hot-seat), with the rules and controls of
+**Monopoly Party (PS2)**. Built on the [Tiny3D](https://github.com/wargio/tiny3d) 2D
+renderer via the Dockerized [`ps3-toolchain-tiny3d`](https://github.com/02900/ps3-toolchain)
+image.
 
-A minimal **starter** for PS3 homebrew on the **PSL1GHT** SDK using **Tiny3D** + **ya2d** — an
-embedded PNG sprite that bounces around the screen while a synthesized MikMod tune plays. It
-exercises Tiny3D's **2D** mode (`tiny3d_Project2D`) plus `ya2d` textured quads and MikMod audio,
-the same 2D path the sibling ports
-([ki-blast-arena](https://github.com/02900/ki-blast-arena),
-[ps3-mega-mario](https://github.com/02900/ps3-mega-mario)) build on.
+The game **rules engine is reused essentially verbatim** from
+[`jemeador/monopoly`](https://github.com/jemeador/monopoly) (MIT) — a headless C++17
+Monopoly engine. Only the PS3 layer (rendering, pad input, the TCP test server) is new.
+See [`source/engine/UPSTREAM.md`](source/engine/UPSTREAM.md) for the (minimal) port changes.
 
-It inherits the standard scaffold from
-[02900/ps3-homebrew-showcase](https://github.com/02900/ps3-homebrew-showcase) (Dockerized
-toolchain, Makefile, CI, PKG packaging) and vendors the shared
-[`ps3-homebrew-skills`](https://github.com/02900/ps3-homebrew-skills) as a submodule.
+## What's implemented
 
-> ## Status: 2D sprite + audio starter
-> Loads a PNG sprite, bounces it around the screen and plays synthesized MikMod audio. Builds
-> green in the toolchain image and runs on RPCS3. *(The old 3D spinning-cube demo lives on the
-> [`3d-chessboard`](https://github.com/02900/ps3-boilerplate-tiny3d/tree/3d-chessboard) branch.)*
+- **Board & turns** — the 40-space board (property squares tinted by colour group), a
+  token per player, hot-seat turn order (Red → Green → Blue → Yellow).
+- **Buy / auction** — land on an unowned property to buy it, or decline to send it to a
+  live bidding auction; owned squares show an owner marker and collect rent.
+- **Property management (L2)** — mortgage / unmortgage, and build / sell houses & hotels
+  (full-group ownership and even-building enforced by the engine).
+- **Jail** — pay the $50 bail, use a Get-Out-of-Jail-Free card, or roll for doubles.
+- **Chance & Community Chest**, income & luxury **taxes**, **debt settlement**
+  (raise cash via L2 or declare **bankruptcy**), and the **win** screen.
+- **Trading** — offer one of your deeds to another player for cash; they accept or decline.
+- Pause menu (Start), MikMod sound, and a per-session randomized dice seed.
 
-## What it does
+Not in scope: the simultaneous *Party* mode and AI opponents (hot-seat only) — see
+[`ideas/monopoly-ps3-port.md`](ideas/monopoly-ps3-port.md).
 
-A minimal "hello, game": an embedded PNG sprite (`data/sprite.png` — an original placeholder)
-moves across Tiny3D's 848×512 2D canvas, **bounces off the four edges** (a blip plays on each
-bounce) while a short **synthesized tune** loops; the D-pad / left stick nudge it.
+## Controls
 
-```c
-ya2d_Texture *sprite = ya2d_loadPNGfromBuffer((void*)sprite_png, sprite_png_size);
-...
-tiny3d_Clear(SKY, TINY3D_CLEAR_ALL);
-tiny3d_Project2D();
-ya2d_drawTexture(sprite, x, y);      /* ya2d: PNG decode + textured quad */
-tiny3d_Flip();
-audio_play_blip();                    /* on bounce */
-```
+| Button | Action |
+|---|---|
+| **Cross (X)** | Roll dice · confirm · buy · accept trade · end turn |
+| **Circle (O)** | Decline / auction · cancel · pass · declare bankruptcy |
+| **L2** | Open the property-management window (mortgage / build) |
+| **Triangle** | Open the trade builder (on your turn) · in jail: use a jail card |
+| **Square** | In management: sell · in trade: change target player · in jail: pay bail |
+| **D-pad** | Navigate menus, adjust bids / cash |
+| **Start** | Pause menu (resume / new game) |
 
-The audio is synthesized in `source/audio.c` (no asset files); the sprite is embedded via
-`bin2o`. `ya2d` handles the PNG decode and the textured quad; `ttf_render.*` is still in the
-scaffold if you want `/dev_flash` TrueType text.
-
-**Controls** (pad on port 0): **D-pad / left stick** nudge the sprite · **Start** exits to the XMB.
-
-## Building
-
-You need the PSL1GHT toolchain — easiest via the prebuilt Docker image (no local install):
+## Build & run
 
 ```bash
-docker run --rm -v "$PWD":/src -w /src ghcr.io/02900/ps3-toolchain-tiny3d make        # -> src.self
-docker run --rm -v "$PWD":/src -w /src ghcr.io/02900/ps3-toolchain-tiny3d make pkg    # -> src.pkg (XMB)
+# On Apple Silicon prefix with DOCKER_DEFAULT_PLATFORM=linux/amd64
+./scripts/build.sh                 # -> src.self (Dockerized toolchain, no local install)
+./scripts/build.sh pkg             # -> installable PKG
+
+# RPCS3: boot the self directly (Configuration → Network can stay default)
+/Applications/RPCS3.app/Contents/MacOS/rpcs3 src.self
 ```
 
-Or the helper wrappers (they auto-retry the toolchain's transient emulation segfaults):
+## Automated tests
+
+An opt-in TCP command server + a Python/pytest suite verify the rules end-to-end over
+the network (deterministic on a fixed seed). See [`tests/README.md`](tests/README.md).
 
 ```bash
-./scripts/build.sh            # build
-./scripts/build.sh pkg        # installable PKG
-PS3_IP=192.168.1.13 ./scripts/deploy.sh   # ps3load to a console running PS3LoadX
+./scripts/build-test.sh            # src.self with the test server (port 9010)
+cd tests && python3 -m venv .venv && . .venv/bin/activate && pip install pytest
+PS3_IP=127.0.0.1 python -m pytest  # movement, buy/auction, management, jail/cards/tax, trade
 ```
 
-> **Platform notes** — **Apple Silicon:** add `--platform linux/amd64` to every `docker run`
-> (or `export DOCKER_DEFAULT_PLATFORM=linux/amd64`; the helper scripts rely on that).
-> **Windows:** run from a **WSL2** shell. **Linux:** prefix with `sudo` if needed.
+## Credits & license
 
-Outputs are named after the mount dir (`/src`): `src.elf` / `src.self` / `src.pkg`.
-
-## Running
-
-- **RPCS3:** *File → Install .pkg* → pick `src.pkg` → launch **PS3 3D Test**. (You can also boot
-  `src.self` directly.)
-- **Real PS3 (HEN/CFW):** install `src.pkg` from the XMB, or `ps3load` the `.self`.
-
-## Project structure
-
-```
-ps3-boilerplate-tiny3d/
-├── .github/workflows/   # CI: build (toolchain image) + docs link lint
-├── source/              # main.c (2D sprite) + audio.c (MikMod synth) + ttf_render.c
-├── include/             # ttf_render.h
-├── data/                # bin2o-embedded assets (sprite.png)
-├── pkgfiles/            # PKG payload: ICON0.PNG
-├── .claude/skills/      # Submodule: ps3-homebrew patterns, as Claude skills
-├── docs/api/            # Per-library API notes (TINY3D, YA2D, …)
-├── scripts/             # Dockerized build.sh / deploy.sh wrappers
-├── Makefile             # PSL1GHT build
-├── sfo.xml              # App metadata (TITLE_ID: PS33DTEST)
-└── README.md
-```
-
-## Toolchain & libraries
-
-Built against the toolchain image's libraries: **Tiny3D** (RSX rendering), **ya2d** (2D / textures),
-**FreeType** (TTF text), plus the PSL1GHT pad/sysutil APIs. Clay is intentionally **not** wired in
-here (this is a rendering sandbox, not a UI app); re-add it like the siblings if a menu is needed.
-
-## Patterns & gotchas
-
-Reusable PS3/PSL1GHT conventions live in the shared
-[`.claude/skills/ps3-homebrew/`](https://github.com/02900/ps3-homebrew-skills) submodule, vendored
-once and used as Claude Code skills so every port stays in sync. Run `git submodule update --init`
-to fetch it. (`docs/PATTERNS.md` is now just a pointer there.) The Tiny3D **2D + audio** path this
-repo exercises should stay in sync with those skills — findings here flow back into the rendering skill.
-
-## Credits
-
-- Scaffold & toolchain: [02900/ps3-toolchain](https://github.com/02900/ps3-toolchain),
-  [02900/ps3-homebrew-showcase](https://github.com/02900/ps3-homebrew-showcase).
-
-## License
-
-MIT.
+- Rules engine: [jemeador/monopoly](https://github.com/jemeador/monopoly) — MIT,
+  © 2021 Jeremy Meador. JSON: [nlohmann/json](https://github.com/nlohmann/json) — MIT.
+- Rules/controls reference: the *Monopoly Party* PS2 FAQ by Menji (GameFAQs).
+- MONOPOLY is a trademark of Hasbro; this is a non-commercial homebrew project.
+- PS3 port code under this repo's [`LICENSE`](LICENSE).
