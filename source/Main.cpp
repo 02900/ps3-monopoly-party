@@ -450,10 +450,10 @@ int main(void) {
 #ifdef NETTEST
     std::string seed = "ps3-monopoly";
 #else
+    // sysGetSystemTime() = microseconds since boot; boot-timing jitter varies it enough
+    // between sessions to reseed the dice RNG.
     char seedbuf[40];
-    u64 sec = 0, nsec = 0; sysGetCurrentTime(&sec, &nsec);
-    std::snprintf(seedbuf, sizeof seedbuf, "ps3-%llu-%llu",
-                  (unsigned long long) sec, (unsigned long long) nsec);
+    std::snprintf(seedbuf, sizeof seedbuf, "ps3-%lld", (long long) sysGetSystemTime());
     std::string seed = seedbuf;
 #endif
     mp::PS3Interface iface(4, seed);
