@@ -12,6 +12,11 @@ See [`source/engine/UPSTREAM.md`](source/engine/UPSTREAM.md) for the (minimal) p
 
 ## What's implemented
 
+- **Menus** — a title screen, main menu, player setup (2–4 players + a token **theme**:
+  Classic / Fantasy / Sci-Fi / Ancient / Prehistoric) and a how-to screen, all built with
+  the **[Clay](https://github.com/nicbarker/clay) layout engine** (`extern/clay-ps3`) with
+  D-pad focus. The whole in-game HUD and every overlay are Clay too; only the board is
+  drawn raw.
 - **Board & turns** — the 40-space board (property squares tinted by colour group), a
   token per player, hot-seat turn order (Red → Green → Blue → Yellow).
 - **Buy / auction** — land on an unowned property to buy it, or decline to send it to a
@@ -26,6 +31,11 @@ See [`source/engine/UPSTREAM.md`](source/engine/UPSTREAM.md) for the (minimal) p
 
 Not in scope: the simultaneous *Party* mode and AI opponents (hot-seat only) — see
 [`ideas/monopoly-ps3-port.md`](ideas/monopoly-ps3-port.md).
+
+**Art & audio (planned).** The UI ships with placeholder colours + code-synthesized
+sound; the image assets to generate are specced in [`docs/assets.md`](docs/assets.md)
+(ComfyUI prompts, sizes, the token-theme sprite list) and the per-screen music tracks in
+[`docs/audio.md`](docs/audio.md). Image slots and track hooks are already wired.
 
 ## Controls
 
