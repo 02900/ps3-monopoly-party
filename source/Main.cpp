@@ -34,7 +34,11 @@ extern "C" {
 #include "nettest/commands.h"
 #endif
 
+#include <algorithm>
+#include <cstring>
+#include <set>
 #include <string>
+#include <vector>
 
 using namespace monopoly;
 
@@ -180,7 +184,12 @@ static void draw_hud(const GameState &s, int playerCount) {
     }
     char pl[80];
     std::snprintf(pl, sizeof pl, "P%d: %s", s.get_controlling_player_index() + 1, prompt);
-    text(HX, y, pl, 0xffFFE082, 12, 18);
+    text(HX, y, pl, 0xffFFE082, 12, 18); y += 24;
+
+    TurnPhase ph = s.get_turn_phase();
+    if (!s.is_game_over() &&
+        (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd))
+        text(HX, y, "L2 = manage properties", 0xff8FB6C9, 11, 16);
 }
 
 // ---- interactive overlays (buy / auction) ---------------------------------
@@ -231,6 +240,73 @@ static void draw_overlay_fg(const GameState &s, int bidAmount) {
     }
 }
 
+// ---- property management window (L2) --------------------------------------
+static const int MG_X = BOARD_X0 + CELL;
+static const int MG_Y = BOARD_Y0 + CELL;
+static const int MG_W = CELL * 9;
+static const int MG_H = CELL * 9;
+
+// The controlling player's deeds, ordered by board position for stable navigation.
+static std::vector<Property> deeds_of(const GameState &s, int p) {
+    std::set<Property> d = s.get_player_deeds(p);
+    std::vector<Property> v(d.begin(), d.end());
+    std::sort(v.begin(), v.end(), [](Property a, Property b) {
+        return space_to_index(property_to_space(a)) < space_to_index(property_to_space(b));
+    });
+    return v;
+}
+
+// Short buildings tag for a deed: "-", "H".."HHHH", "HOT", or "RR"/"UT".
+static void buildings_tag(const GameState &s, Property p, char *out) {
+    PropertyGroup g = property_group(p);
+    if (g == PropertyGroup::Railroad) { std::strcpy(out, "RR"); return; }
+    if (g == PropertyGroup::Utility)  { std::strcpy(out, "UT"); return; }
+    int lvl = s.get_building_level(p);
+    if (lvl == 0)          { std::strcpy(out, "-"); return; }
+    if (lvl == HotelLevel) { std::strcpy(out, "HOT"); return; }
+    int k = 0; for (; k < lvl && k < 4; ++k) out[k] = 'H';
+    out[k] = 0;
+}
+
+static void draw_mgmt_bg() {
+    fill_rect(MG_X - 2, MG_Y - 2, MG_W + 4, MG_H + 4, 0xffF5F0E1);
+    fill_rect(MG_X,     MG_Y,     MG_W,     MG_H,     0xff14202B);
+}
+
+static void draw_mgmt_fg(const GameState &s, int sel) {
+    const int c = s.get_controlling_player_index();
+    std::vector<Property> deeds = deeds_of(s, c);
+    const int tx = MG_X + 12;
+    int ty = MG_Y + 12;
+    char l[96];
+
+    std::snprintf(l, sizeof l, "MANAGE  P%d   $%d", c + 1, s.get_player_funds(c));
+    text(tx, ty, l, 0xffFFFFFF, 14, 22); ty += 32;
+
+    int n = (int) deeds.size();
+    if (n == 0) {
+        text(tx, ty, "(no properties yet)", 0xffCCCCCC, 13, 20);
+    } else {
+        if (sel < 0) sel = 0;
+        if (sel >= n) sel = n - 1;
+        int first = sel - 3; if (first < 0) first = 0;
+        int last = first + 7; if (last > n - 1) last = n - 1;
+        for (int i = first; i <= last; ++i) {
+            Property p = deeds[i];
+            char bs[8]; buildings_tag(s, p, bs);
+            std::snprintf(l, sizeof l, "%s %-15s %-4s %s",
+                          i == sel ? ">" : " ", to_string(p).c_str(), bs,
+                          s.get_property_is_mortgaged(p) ? "MORT" : "");
+            text(tx, ty, l, i == sel ? 0xffFFE082 : 0xffDDDDDD, 12, 18);
+            ty += 22;
+        }
+    }
+
+    ty = MG_Y + MG_H - 46;
+    text(tx, ty, "Up/Dn pick  Tri Build  Sq Sell", 0xff9FE6A0, 11, 16); ty += 20;
+    text(tx, ty, "X Mortgage toggle   L2/O Close", 0xff9FE6A0, 11, 16);
+}
+
 // ---- main ------------------------------------------------------------------
 static padInfo  pad_info;
 static padData  pad_data;
@@ -256,8 +332,10 @@ int main(void) {
     nettest::Start();                   // opt-in TCP command server (port 9010)
 #endif
 
-    int prev[6] = {0,0,0,0,0,0};    // X, O, Up, Dn, Lt, Rt
-    int bidAmount = 0;              // current bidder's entry during an auction
+    int prev[9] = {0};             // X, O, Up, Dn, Lt, Rt, L2, Triangle, Square
+    int bidAmount = 0;             // current bidder's entry during an auction
+    int mgmtOpen  = 0;             // property-management (L2) window open?
+    int mgmtSel   = 0;             // selected deed row in that window
 
     while (g_running) {
         sysUtilCheckCallback();
@@ -271,25 +349,60 @@ int main(void) {
         }
 #endif
 
-        int cur[6] = {0,0,0,0,0,0};
+        int cur[9] = {0};
         ioPadGetInfo(&pad_info);
         if (pad_info.status[0]) {
             ioPadGetData(0, &pad_data);
             if (pad_data.BTN_START) g_running = 0;
-            cur[0] = pad_data.BTN_CROSS;  cur[1] = pad_data.BTN_CIRCLE;
-            cur[2] = pad_data.BTN_UP;     cur[3] = pad_data.BTN_DOWN;
-            cur[4] = pad_data.BTN_LEFT;   cur[5] = pad_data.BTN_RIGHT;
+            cur[0] = pad_data.BTN_CROSS;    cur[1] = pad_data.BTN_CIRCLE;
+            cur[2] = pad_data.BTN_UP;       cur[3] = pad_data.BTN_DOWN;
+            cur[4] = pad_data.BTN_LEFT;     cur[5] = pad_data.BTN_RIGHT;
+            cur[6] = pad_data.BTN_L2;       cur[7] = pad_data.BTN_TRIANGLE;
+            cur[8] = pad_data.BTN_SQUARE;
         }
-        int edge[6];
-        for (int i = 0; i < 6; ++i) { edge[i] = cur[i] && !prev[i]; prev[i] = cur[i]; }
-        const int eX = edge[0], eO = edge[1], eUp = edge[2], eDn = edge[3], eLt = edge[4], eRt = edge[5];
+        int edge[9];
+        for (int i = 0; i < 9; ++i) { edge[i] = cur[i] && !prev[i]; prev[i] = cur[i]; }
+        const int eX = edge[0], eO = edge[1], eUp = edge[2], eDn = edge[3],
+                  eLt = edge[4], eRt = edge[5], eL2 = edge[6], eTri = edge[7], eSq = edge[8];
 
         // ---- drive the engine ----
         GameState s = game.get_state();
-        if (!s.is_game_over()) {
-            const int c = s.get_controlling_player_index();
+        const bool over = s.is_game_over();
+        const TurnPhase ph = s.get_turn_phase();
+        const int c = s.get_controlling_player_index();
+
+        // The management window is available on the controlling player's own turn,
+        // outside mid-decision phases (build/mortgage are rejected there anyway).
+        const bool mgmtAllowed = !over &&
+            (ph == TurnPhase::WaitingForRoll || ph == TurnPhase::WaitingForTurnEnd ||
+             ph == TurnPhase::WaitingForAcquisitionManagement);
+        if (eL2) mgmtOpen = mgmtOpen ? 0 : (mgmtAllowed ? 1 : 0);
+        if (mgmtOpen && !mgmtAllowed) mgmtOpen = 0;
+
+        if (mgmtOpen) {
+            // ---- management window drives the pad ----
+            std::vector<Property> deeds = deeds_of(s, c);
+            int n = (int) deeds.size();
+            if (n > 0) {
+                if (eUp && mgmtSel > 0)      mgmtSel--;
+                if (eDn && mgmtSel < n - 1)  mgmtSel++;
+                if (mgmtSel >= n) mgmtSel = n - 1;
+                Property p = deeds[mgmtSel];
+                int advanced = 0;
+                if (eTri)      { iface.buy_building(c, p);  advanced = 1; }
+                else if (eSq)  { iface.sell_building(c, p); advanced = 1; }
+                else if (eX) {
+                    if (s.get_property_is_mortgaged(p)) iface.unmortgage_property(c, p);
+                    else                                iface.mortgage_property(c, p);
+                    advanced = 1;
+                }
+                if (advanced) { game.process(); audio_play_blip(); }
+            }
+            if (eO) mgmtOpen = 0;
+        } else if (!over) {
+            // ---- normal turn controls ----
             int advanced = 0;
-            switch (s.get_turn_phase()) {
+            switch (ph) {
                 case TurnPhase::WaitingForRoll:
                     if (eX) { iface.roll_dice(c); advanced = 1; audio_play_blip(); }
                     break;
@@ -330,12 +443,14 @@ int main(void) {
         tiny3d_Project2D();
 
         draw_board(s, iface.player_count());
-        draw_overlay_bg(s);
+        if (mgmtOpen) draw_mgmt_bg();
+        else          draw_overlay_bg(s);
 
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
         draw_hud(s, iface.player_count());
-        draw_overlay_fg(s, bidAmount);
+        if (mgmtOpen) draw_mgmt_fg(s, mgmtSel);
+        else          draw_overlay_fg(s, bidAmount);
 
         tiny3d_Flip();
         audio_update();
