@@ -23,7 +23,7 @@ static void title_bar(const char *text) {
     CLAY(CLAY_ID("TitleBar"), {
         .layout = { .padding = { 16, 16, 10, 10 }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER } }
     }) {
-        CLAY_TEXT(ui_str(text), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 40 }));
+        CLAY_TEXT(ui_str(text), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 26 }));
     }
 }
 
@@ -59,8 +59,8 @@ static void build_title(void) {
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
         .backgroundColor = UI_BG
     }) {
-        CLAY_TEXT(ui_str("MONOPOLY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 64 }));
-        CLAY_TEXT(ui_str("PARTY  -  PS3"), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 28 }));
+        CLAY_TEXT(ui_str("MONOPOLY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 30 }));
+        CLAY_TEXT(ui_str("PARTY  -  PS3"), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 24 }));
         CLAY(CLAY_ID("TitleGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(30) } } }) {}
         hint("Press  START");
     }
@@ -134,7 +134,7 @@ static void build_howto(void) {
                     .padding = CLAY_PADDING_ALL(40), .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 10 },
         .backgroundColor = UI_BG
     }) {
-        CLAY_TEXT(ui_str("HOW TO PLAY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 32 }));
+        CLAY_TEXT(ui_str("HOW TO PLAY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 26 }));
         CLAY(CLAY_ID("HowGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(12) } } }) {}
         for (int i = 0; i < (int)(sizeof lines / sizeof lines[0]); ++i)
             CLAY_TEXT(ui_str(lines[i]), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT_DIM, .fontSize = 18 }));

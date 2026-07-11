@@ -535,7 +535,8 @@ int main(void) {
     // TTF glyph cache: reserve RSX texture memory, then load the PS3 system font.
     g_ttf_texture = (u32 *) tiny3d_AllocTexture(1600 * 32 * 32 * 2 + 4096);
     init_ttf_table((u16 *) g_ttf_texture);
-    TTFLoadFont(0, (char *)"/dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF", NULL, 0);
+    // Rodin (the PS3 XMB UI font) — cleaner/more legible than the VR face.
+    TTFLoadFont(0, (char *)"/dev_flash/data/font/SCE-PS3-RD-R-LATIN.TTF", NULL, 0);
 
     ui_init(SCREEN_W, SCREEN_H);        // Clay arena + text-measure callback
 
@@ -605,8 +606,7 @@ int main(void) {
 
         // ---- menu system (title / main menu / setup / how-to) ----
         if (ui_in_menu()) {
-            tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
-            tiny3d_Project2D();
+            ui_begin_frame(CLEAR);
             reset_ttf_frame();
             set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
             UiGameConfig cfg;
@@ -766,8 +766,7 @@ int main(void) {
         fill_snapshot(snap, s, iface.player_count(), mgmtOpen, mgmtSel,
                       tradeOpen, tradeTarget, tradeDeedSel, tradeCash, bidAmount, paused);
 
-        tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
-        tiny3d_Project2D();
+        ui_begin_frame(CLEAR);
         draw_board(s, iface.player_count());     // raw scene, under the Clay UI
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);

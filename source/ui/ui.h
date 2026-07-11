@@ -61,6 +61,11 @@ typedef struct {
 // Create Clay's arena + text-measure callback. Call once, after ya2d + ttf init.
 void ui_init(int screen_w, int screen_h);
 
+// Clear + enable alpha blending + 2D projection. Call at the top of every frame,
+// before drawing the board and before the Clay render (blending is required so TTF
+// glyphs don't render with opaque black boxes). clear_argb is 0xAARRGGBB.
+void ui_begin_frame(unsigned int clear_argb);
+
 // Render the in-game HUD + the active overlay/modal with Clay. Call each frame in a
 // match AFTER the raw board draw + tiny3d_Project2D() + reset_ttf_frame().
 void ui_render_game(const UiSnapshot *snap);
