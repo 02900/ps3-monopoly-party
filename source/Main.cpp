@@ -29,6 +29,11 @@ extern "C" {
 #include "engine/Board.h"
 #include "engine/DisplayStrings.h"   // to_string(Property/Space/…)
 
+#ifdef NETTEST
+#include "nettest/nettest.h"
+#include "nettest/commands.h"
+#endif
+
 #include <string>
 
 using namespace monopoly;
@@ -205,8 +210,11 @@ static void draw_overlay_fg(const GameState &s, int bidAmount) {
         std::snprintf(l, sizeof l, "P%d landed on", c + 1);
         text(tx, ty, l, 0xffFFFFFF, 13, 20); ty += 30;
         text(tx, ty, to_string(prop).c_str(), 0xffFFE082, 15, 24); ty += 34;
-        std::snprintf(l, sizeof l, "Buy for $%d ?", price_of_property(prop));
-        text(tx, ty, l, 0xffFFFFFF, 14, 22); ty += 34;
+        if (prop != Property::Invalid) {   // guard: price table is undefined for non-properties
+            std::snprintf(l, sizeof l, "Buy for $%d ?", price_of_property(prop));
+            text(tx, ty, l, 0xffFFFFFF, 14, 22);
+        }
+        ty += 34;
         text(tx, ty, "X = Buy     O = Auction", 0xff9FE6A0, 13, 20);
     } else if (s.get_turn_phase() == TurnPhase::WaitingForBids) {
         Auction a = s.get_current_auction();
@@ -244,11 +252,24 @@ int main(void) {
     Game game(&iface);
     game.process();                     // settle to the first WaitingForRoll
 
+#ifdef NETTEST
+    nettest::Start();                   // opt-in TCP command server (port 9010)
+#endif
+
     int prev[6] = {0,0,0,0,0,0};    // X, O, Up, Dn, Lt, Rt
     int bidAmount = 0;              // current bidder's entry during an auction
 
     while (g_running) {
         sysUtilCheckCallback();
+
+#ifdef NETTEST
+        // Apply at most one queued test command before this frame's input.
+        {
+            std::string tcmd;
+            if (nettest::PopCommand(tcmd))
+                nettest::PostReply(handle_test_command(game, iface, tcmd));
+        }
+#endif
 
         int cur[6] = {0,0,0,0,0,0};
         ioPadGetInfo(&pad_info);

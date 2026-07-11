@@ -33,6 +33,16 @@ INCLUDES	:=	include source/engine
 PKGFILES	:=	pkgfiles
 
 #---------------------------------------------------------------------------------
+# End-to-end test harness (opt-in): build with `NETTEST=1 make` (or
+# scripts/build-test.sh) to compile the source/nettest TCP command server and
+# define -DNETTEST. Default builds are unchanged and open no port.
+#---------------------------------------------------------------------------------
+ifneq ($(strip $(NETTEST)),)
+SOURCES		+=	source/nettest
+NETDEF		:=	-DNETTEST
+endif
+
+#---------------------------------------------------------------------------------
 # Libraries to link
 # Includes: Tiny3D, YA2D, libcurl, PolarSSL, MikMod, Mini18n
 #---------------------------------------------------------------------------------
@@ -45,10 +55,10 @@ LIBS		:=	-lcurl -lya2d -lfont3d -ltiny3d -lsimdmath \
 #---------------------------------------------------------------------------------
 # Compiler flags
 #---------------------------------------------------------------------------------
-CFLAGS		=	-O2 -Wall -mcpu=cell -std=gnu99 $(MACHDEP) $(INCLUDE)
+CFLAGS		=	-O2 -Wall -mcpu=cell -std=gnu99 $(NETDEF) $(MACHDEP) $(INCLUDE)
 # The vendored monopoly engine (source/engine) is C++17 (std::variant/optional).
 # newlib_compat.h is force-included to supply std::to_string (missing on newlib).
-CXXFLAGS	=	-O2 -Wall -mcpu=cell -std=gnu++17 -include newlib_compat.h $(MACHDEP) $(INCLUDE)
+CXXFLAGS	=	-O2 -Wall -mcpu=cell -std=gnu++17 -include newlib_compat.h $(NETDEF) $(MACHDEP) $(INCLUDE)
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------

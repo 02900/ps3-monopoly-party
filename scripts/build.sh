@@ -43,7 +43,7 @@ echo ">> Building with $IMAGE (make $TARGET)"
 # unrelated to the code, so retry a few times before giving up.
 attempts=3
 for try in $(seq 1 "$attempts"); do
-  if docker run --rm -v "$REPO_ROOT":/src -w /src "$IMAGE" make $TARGET; then
+  if docker run --rm -v "$REPO_ROOT":/src -w /src ${NETTEST:+-e NETTEST} "$IMAGE" make $TARGET; then
     exit 0
   fi
   echo ">> build attempt $try/$attempts failed" >&2
