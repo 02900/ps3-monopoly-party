@@ -432,6 +432,94 @@ static void draw_trade_fg(const GameState &s, int me, int target, int deedSel, i
     text(tx, ty, "X = Send    O = Cancel", 0xff9FE6A0, 13, 20);
 }
 
+// ---- GameState -> UiSnapshot (the plain-C bridge to the Clay in-game UI) ----
+static int to_ui_phase(TurnPhase p) {
+    switch (p) {
+        case TurnPhase::WaitingForRoll:                  return UI_PHASE_ROLL;
+        case TurnPhase::WaitingForBuyPropertyInput:      return UI_PHASE_BUY;
+        case TurnPhase::WaitingForBids:                  return UI_PHASE_BIDS;
+        case TurnPhase::WaitingForAcquisitionManagement: return UI_PHASE_MANAGE;
+        case TurnPhase::WaitingForTurnEnd:               return UI_PHASE_TURNEND;
+        case TurnPhase::WaitingForDebtSettlement:        return UI_PHASE_DEBT;
+        case TurnPhase::WaitingForTradeOfferResponse:    return UI_PHASE_TRADE;
+        case TurnPhase::GameOver:                        return UI_PHASE_GAMEOVER;
+    }
+    return UI_PHASE_ROLL;
+}
+
+static void fill_snapshot(UiSnapshot &u, const GameState &s, int count,
+                          int mgmtOpen, int mgmtSel, int tradeOpen, int tradeTarget,
+                          int tradeDeedSel, int tradeCash, int bidAmount, int paused) {
+    std::memset(&u, 0, sizeof u);
+    u.count       = count;
+    u.active      = s.get_active_player_index();
+    u.controlling = s.get_controlling_player_index();
+    u.phase       = to_ui_phase(s.get_turn_phase());
+    u.gameOver    = s.is_game_over() ? 1 : 0;
+    u.winner      = -1;
+    if (u.gameOver)
+        for (int i = 0; i < count; ++i) if (!s.get_player_eliminated(i)) { u.winner = i; break; }
+
+    for (int p = 0; p < count; ++p) {
+        u.funds[p]      = s.get_player_funds(p);
+        u.netWorth[p]   = s.get_net_worth(p);
+        u.jailed[p]     = s.get_player_turns_remaining_in_jail(p);
+        u.eliminated[p] = s.get_player_eliminated(p) ? 1 : 0;
+    }
+    std::pair<int,int> d = s.get_last_dice_roll();
+    u.die1 = d.first; u.die2 = d.second;
+    std::snprintf(u.spaceName, sizeof u.spaceName, "%s",
+                  to_string(s.get_player_position(u.active)).c_str());
+
+    const int c = u.controlling;
+    if (u.phase == UI_PHASE_BUY) {
+        Property prop = space_to_property(s.get_player_position(u.active));
+        std::snprintf(u.buyName, sizeof u.buyName, "%s", to_string(prop).c_str());
+        u.buyPrice = (prop != Property::Invalid) ? price_of_property(prop) : 0;
+    }
+    if (u.phase == UI_PHASE_BIDS) {
+        Auction a = s.get_current_auction();
+        Property ap = a.property;
+        std::snprintf(u.aucName, sizeof u.aucName, "%s", to_string(ap).c_str());
+        u.aucHighBid = a.highestBid;
+        u.aucBid     = bidAmount;
+        u.aucBidder  = a.biddingOrder.empty() ? -1 : a.biddingOrder.front();
+    }
+    if (u.phase == UI_PHASE_DEBT) u.debtShortfall = -s.get_player_funds(c);
+    if (u.phase == UI_PHASE_TRADE) {
+        Trade tr = s.get_pending_trade_offer();
+        u.trOfferer = tr.offeringPlayer;
+        promise_summary(tr.offer, u.trGive, sizeof u.trGive);
+        promise_summary(tr.consideration, u.trGet, sizeof u.trGet);
+    }
+    if (u.phase == UI_PHASE_ROLL) {
+        u.jailTurns   = s.get_player_turns_remaining_in_jail(c);
+        u.jailCanBail = s.check_if_player_is_allowed_to_pay_bail(c) ? 1 : 0;
+        u.jailHasCard = !s.get_player_get_out_of_jail_free_cards(c).empty() ? 1 : 0;
+    }
+    u.mgmtOpen = mgmtOpen;
+    if (mgmtOpen) {
+        std::vector<Property> dd = deeds_of(s, c);
+        int n = (int) dd.size(); if (n > UI_MAX_DEEDS) n = UI_MAX_DEEDS;
+        u.mgmtCount = n; u.mgmtSel = mgmtSel;
+        for (int i = 0; i < n; ++i) {
+            std::snprintf(u.mgmtName[i], sizeof u.mgmtName[i], "%s", to_string(dd[i]).c_str());
+            buildings_tag(s, dd[i], u.mgmtTag[i]);
+            u.mgmtMort[i] = s.get_property_is_mortgaged(dd[i]) ? 1 : 0;
+        }
+    }
+    u.tradeOpen = tradeOpen;
+    if (tradeOpen) {
+        u.tradeTarget = tradeTarget; u.tradeCash = tradeCash;
+        std::vector<Property> dd = deeds_of(s, c);
+        if (!dd.empty()) {
+            int i = tradeDeedSel; if (i < 0) i = 0; if (i >= (int) dd.size()) i = (int) dd.size() - 1;
+            std::snprintf(u.tradeGive, sizeof u.tradeGive, "%s", to_string(dd[i]).c_str());
+        }
+    }
+    u.paused = paused;
+}
+
 // ---- main ------------------------------------------------------------------
 static padInfo  pad_info;
 static padData  pad_data;
@@ -538,33 +626,18 @@ int main(void) {
             continue;
         }
 
-        // Pause menu (Start toggles). While paused, all game input is suspended.
+        // Pause (Start toggles). While paused, game input is suspended but the frame
+        // still renders (the Clay UI shows the pause modal from the snapshot).
         if (eStart) paused = !paused;
-        if (paused) {
-            if (eSelect) { ui_goto_menu(); paused = 0; mgmtOpen = 0; tradeOpen = 0; }
-            GameState ps = game.get_state();
-            tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
-            tiny3d_Project2D();
-            draw_board(ps, iface.player_count());
-            fill_rect(OV_X - 2, OV_Y - 2, OV_W + 4, OV_H + 4, 0xffF5F0E1);
-            fill_rect(OV_X, OV_Y, OV_W, OV_H, 0xff1B2A38);
-            reset_ttf_frame();
-            set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
-            draw_hud(ps, iface.player_count());
-            text(OV_X + 16, OV_Y + 20, "PAUSED", 0xffFFFFFF, 16, 26);
-            text(OV_X + 16, OV_Y + 60, "Start = resume", 0xff9FE6A0, 13, 20);
-            text(OV_X + 16, OV_Y + 86, "Select = quit to menu", 0xff9FE6A0, 13, 20);
-            tiny3d_Flip();
-            audio_update();
-            continue;
-        }
+        if (paused && eSelect) { ui_goto_menu(); paused = 0; mgmtOpen = 0; tradeOpen = 0; }
 
-        // ---- drive the engine ----
+        // ---- drive the engine (skipped while paused) ----
         GameState s = game.get_state();
         const bool over = s.is_game_over();
         const TurnPhase ph = s.get_turn_phase();
         const int c = s.get_controlling_player_index();
 
+        if (!paused) {
         // The management window is available on the controlling player's own turn,
         // outside mid-decision phases (build/mortgage are rejected there anyway).
         const bool mgmtAllowed = !over &&
@@ -685,24 +758,20 @@ int main(void) {
             }
             if (advanced) game.process();
         }
+        } // if (!paused)
 
-        // ---- render (all quads first, then all text) ----
+        // ---- render: raw board (scene) + Clay HUD/overlays from a snapshot ----
         s = game.get_state();
+        UiSnapshot snap;
+        fill_snapshot(snap, s, iface.player_count(), mgmtOpen, mgmtSel,
+                      tradeOpen, tradeTarget, tradeDeedSel, tradeCash, bidAmount, paused);
+
         tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
         tiny3d_Project2D();
-
-        draw_board(s, iface.player_count());
-        if (mgmtOpen)       draw_mgmt_bg();
-        else if (tradeOpen) draw_trade_bg();
-        else                draw_overlay_bg(s);
-
+        draw_board(s, iface.player_count());     // raw scene, under the Clay UI
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
-        draw_hud(s, iface.player_count());
-        if (mgmtOpen)       draw_mgmt_fg(s, mgmtSel);
-        else if (tradeOpen) draw_trade_fg(s, s.get_controlling_player_index(),
-                                          tradeTarget, tradeDeedSel, tradeCash);
-        else                draw_overlay_fg(s, bidAmount);
+        ui_render_game(&snap);                   // Clay HUD + overlays (does clay_render)
 
         tiny3d_Flip();
         audio_update();
