@@ -462,9 +462,12 @@ int main(void) {
     std::snprintf(seedbuf, sizeof seedbuf, "ps3-%lld", (long long) sysGetSystemTime());
     std::string seed = seedbuf;
 #endif
-    mp::PS3Interface iface(4, seed);
-    Game game(&iface);
-    game.process();                     // settle to the first WaitingForRoll
+    // Heap-held so a "New Game" from the menu can rebuild the match with the chosen
+    // player count (the engine captures playerCount at Game construction). The loop
+    // aliases them as references, so the game-body code below stays unchanged.
+    mp::PS3Interface *ifacep = new mp::PS3Interface(4, seed);
+    Game *gamep = new Game(ifacep);
+    gamep->process();                   // settle to the first WaitingForRoll
 
 #ifdef NETTEST
     nettest::Start();                   // opt-in TCP command server (port 9010)
@@ -482,6 +485,9 @@ int main(void) {
 
     while (g_running) {
         sysUtilCheckCallback();
+
+        mp::PS3Interface &iface = *ifacep;   // aliases (re-bound each frame after any rebuild)
+        Game &game = *gamep;
 
 #ifdef NETTEST
         // Apply at most one queued test command before this frame's input.
@@ -509,10 +515,33 @@ int main(void) {
                   eLt = edge[4], eRt = edge[5], eL2 = edge[6], eTri = edge[7], eSq = edge[8],
                   eStart = edge[9], eSelect = edge[10];
 
+        // ---- menu system (title / main menu / setup / how-to) ----
+        if (ui_in_menu()) {
+            tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
+            tiny3d_Project2D();
+            reset_ttf_frame();
+            set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
+            UiGameConfig cfg;
+            UiAction act = ui_menu_frame(cur[2], cur[3], cur[4], cur[5],
+                                         eX, eO, eStart, &cfg);
+            tiny3d_Flip();
+            audio_update();
+            if (act == UI_ACT_START_GAME) {
+                delete gamep; delete ifacep;
+                ifacep = new mp::PS3Interface(cfg.playerCount, seed);
+                gamep  = new Game(ifacep);
+                gamep->process();
+                paused = mgmtOpen = tradeOpen = 0;
+            } else if (act == UI_ACT_QUIT) {
+                g_running = 0;
+            }
+            continue;
+        }
+
         // Pause menu (Start toggles). While paused, all game input is suspended.
         if (eStart) paused = !paused;
         if (paused) {
-            if (eSelect) { game.reset(); paused = 0; mgmtOpen = 0; }
+            if (eSelect) { ui_goto_menu(); paused = 0; mgmtOpen = 0; tradeOpen = 0; }
             GameState ps = game.get_state();
             tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
             tiny3d_Project2D();
@@ -524,7 +553,7 @@ int main(void) {
             draw_hud(ps, iface.player_count());
             text(OV_X + 16, OV_Y + 20, "PAUSED", 0xffFFFFFF, 16, 26);
             text(OV_X + 16, OV_Y + 60, "Start = resume", 0xff9FE6A0, 13, 20);
-            text(OV_X + 16, OV_Y + 86, "Select = new game", 0xff9FE6A0, 13, 20);
+            text(OV_X + 16, OV_Y + 86, "Select = quit to menu", 0xff9FE6A0, 13, 20);
             tiny3d_Flip();
             audio_update();
             continue;
@@ -674,8 +703,6 @@ int main(void) {
         else if (tradeOpen) draw_trade_fg(s, s.get_controlling_player_index(),
                                           tradeTarget, tradeDeedSel, tradeCash);
         else                draw_overlay_fg(s, bidAmount);
-
-        ui_render_smoke();        // P1: Clay panel over the board — proves the pipeline
 
         tiny3d_Flip();
         audio_update();

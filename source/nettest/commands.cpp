@@ -20,6 +20,7 @@
 #include "../engine/GameState.h"
 #include "../engine/Board.h"
 #include "../engine/DisplayStrings.h"
+#include "../ui/ui.h"   // ui_force_game(): enter the GAME screen so tests + visual align
 
 #include <cstdlib>
 #include <sstream>
@@ -210,7 +211,7 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
     }
 
     // ---- driving (push an Input, then advance) ----
-    if (op == "newgame") { game.reset(); return "ok"; }
+    if (op == "newgame") { game.reset(); ui_force_game(); return "ok"; }
     if (op == "roll")    { iface.roll_dice(controlling);      game.process(); return "ok"; }
     if (op == "step")    { game.process(); return "ok"; }
     if (op == "buy")     { iface.buy_property(controlling);   game.process(); return "ok"; }
