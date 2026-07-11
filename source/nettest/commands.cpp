@@ -200,6 +200,14 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
             if (!s.get_player_eliminated(i)) return std::to_string(i);
         return "-1";
     }
+    if (op == "pendingtrade") {
+        if (s.get_turn_phase() != TurnPhase::WaitingForTradeOfferResponse) return "none";
+        Trade tr = s.get_pending_trade_offer();
+        std::ostringstream o;
+        o << "from=" << tr.offeringPlayer << " to=" << tr.consideringPlayer
+          << " offercash=" << tr.offer.cash << " getcash=" << tr.consideration.cash;
+        return o.str();
+    }
 
     // ---- driving (push an Input, then advance) ----
     if (op == "newgame") { game.reset(); return "ok"; }
@@ -217,6 +225,30 @@ std::string handle_test_command(Game& game, mp::PS3Interface& iface, const std::
     if (op == "paybail") { iface.pay_bail(controlling);       game.process(); return "ok"; }
     if (op == "usejail") { iface.use_get_out_of_jail_free_card(controlling); game.process(); return "ok"; }
     if (op == "resign")  { iface.resign(controlling);         game.process(); return "ok"; }
+    if (op == "offertrade") {
+        // offertrade <to> <giveDeed|-1> <giveCash> <getDeed|-1> <getCash>  (from = controlling)
+        if (t.size() < 6 || !valid_player(s, as_int(t[1]))) return err("args");
+        Trade tr;
+        tr.offeringPlayer    = controlling;
+        tr.consideringPlayer = as_int(t[1]);
+        tr.offer.cash         = as_int(t[3]);
+        tr.consideration.cash = as_int(t[5]);
+        int gd = as_int(t[2]), rd = as_int(t[4]);
+        if (gd >= 0) { Property p = prop_at(gd); if (p != Property::Invalid) tr.offer.deeds.insert(p); }
+        if (rd >= 0) { Property p = prop_at(rd); if (p != Property::Invalid) tr.consideration.deeds.insert(p); }
+        iface.propose_trade(tr); game.process(); return "ok";
+    }
+    if (op == "accepttrade") {
+        if (s.get_turn_phase() != TurnPhase::WaitingForTradeOfferResponse) return err("notrade");
+        Trade pend = s.get_pending_trade_offer();
+        Trade rec;
+        rec.offeringPlayer   = pend.consideringPlayer;
+        rec.consideringPlayer = pend.offeringPlayer;
+        rec.offer         = pend.consideration;
+        rec.consideration = pend.offer;
+        iface.propose_trade(rec); game.process(); return "ok";
+    }
+    if (op == "declinetrade") { iface.decline_trade(controlling); game.process(); return "ok"; }
     if (op == "mortgage" || op == "unmortgage" || op == "build" || op == "sell") {
         if (t.size() < 2) return err("args");
         Property p = prop_at(as_int(t[1]));

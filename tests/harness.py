@@ -168,6 +168,19 @@ class PS3Client:
     def drawcard(self, p, deck):
         return self.send(f"drawcard {p} {deck}")
 
+    def offertrade(self, to, give_deed=-1, give_cash=0, get_deed=-1, get_cash=0):
+        return self.send(f"offertrade {to} {give_deed} {give_cash} {get_deed} {get_cash}")
+
+    def accepttrade(self):
+        return self.send("accepttrade")
+
+    def declinetrade(self):
+        return self.send("declinetrade")
+
+    def pendingtrade(self):
+        r = self.send("pendingtrade")
+        return None if r == "none" else self._kv(r)
+
     # -- deterministic setup (force_*) ----------------------------------------
     def setfunds(self, p, amount):
         return self.send(f"setfunds {p} {amount}")

@@ -13,6 +13,7 @@
 #include <ppu-types.h>
 #include <io/pad.h>
 #include <sysutil/sysutil.h>
+#include <lv2/systime.h>
 #include <tiny3d.h>          // has its own extern "C" guard
 #include "audio.h"           // has its own extern "C" guard
 
@@ -378,8 +379,18 @@ int main(void) {
     init_ttf_table((u16 *) g_ttf_texture);
     TTFLoadFont(0, (char *)"/dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF", NULL, 0);
 
-    // Deterministic seed for now (varied seeding is a later-milestone polish item).
-    mp::PS3Interface iface(4, "ps3-monopoly");
+    // Release builds seed the dice RNG from the clock so each session differs; the
+    // NETTEST build keeps a fixed seed so the e2e suite stays deterministic.
+#ifdef NETTEST
+    std::string seed = "ps3-monopoly";
+#else
+    char seedbuf[40];
+    u64 sec = 0, nsec = 0; sysGetCurrentTime(&sec, &nsec);
+    std::snprintf(seedbuf, sizeof seedbuf, "ps3-%llu-%llu",
+                  (unsigned long long) sec, (unsigned long long) nsec);
+    std::string seed = seedbuf;
+#endif
+    mp::PS3Interface iface(4, seed);
     Game game(&iface);
     game.process();                     // settle to the first WaitingForRoll
 
@@ -387,10 +398,11 @@ int main(void) {
     nettest::Start();                   // opt-in TCP command server (port 9010)
 #endif
 
-    int prev[9] = {0};             // X, O, Up, Dn, Lt, Rt, L2, Triangle, Square
+    int prev[11] = {0};            // X, O, Up, Dn, Lt, Rt, L2, Triangle, Square, Start, Select
     int bidAmount = 0;             // current bidder's entry during an auction
     int mgmtOpen  = 0;             // property-management (L2) window open?
     int mgmtSel   = 0;             // selected deed row in that window
+    int paused    = 0;             // pause menu open?
 
     while (g_running) {
         sysUtilCheckCallback();
@@ -404,21 +416,43 @@ int main(void) {
         }
 #endif
 
-        int cur[9] = {0};
+        int cur[11] = {0};
         ioPadGetInfo(&pad_info);
         if (pad_info.status[0]) {
             ioPadGetData(0, &pad_data);
-            if (pad_data.BTN_START) g_running = 0;
             cur[0] = pad_data.BTN_CROSS;    cur[1] = pad_data.BTN_CIRCLE;
             cur[2] = pad_data.BTN_UP;       cur[3] = pad_data.BTN_DOWN;
             cur[4] = pad_data.BTN_LEFT;     cur[5] = pad_data.BTN_RIGHT;
             cur[6] = pad_data.BTN_L2;       cur[7] = pad_data.BTN_TRIANGLE;
-            cur[8] = pad_data.BTN_SQUARE;
+            cur[8] = pad_data.BTN_SQUARE;   cur[9] = pad_data.BTN_START;
+            cur[10] = pad_data.BTN_SELECT;
         }
-        int edge[9];
-        for (int i = 0; i < 9; ++i) { edge[i] = cur[i] && !prev[i]; prev[i] = cur[i]; }
+        int edge[11];
+        for (int i = 0; i < 11; ++i) { edge[i] = cur[i] && !prev[i]; prev[i] = cur[i]; }
         const int eX = edge[0], eO = edge[1], eUp = edge[2], eDn = edge[3],
-                  eLt = edge[4], eRt = edge[5], eL2 = edge[6], eTri = edge[7], eSq = edge[8];
+                  eLt = edge[4], eRt = edge[5], eL2 = edge[6], eTri = edge[7], eSq = edge[8],
+                  eStart = edge[9], eSelect = edge[10];
+
+        // Pause menu (Start toggles). While paused, all game input is suspended.
+        if (eStart) paused = !paused;
+        if (paused) {
+            if (eSelect) { game.reset(); paused = 0; mgmtOpen = 0; }
+            GameState ps = game.get_state();
+            tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
+            tiny3d_Project2D();
+            draw_board(ps, iface.player_count());
+            fill_rect(OV_X - 2, OV_Y - 2, OV_W + 4, OV_H + 4, 0xffF5F0E1);
+            fill_rect(OV_X, OV_Y, OV_W, OV_H, 0xff1B2A38);
+            reset_ttf_frame();
+            set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
+            draw_hud(ps, iface.player_count());
+            text(OV_X + 16, OV_Y + 20, "PAUSED", 0xffFFFFFF, 16, 26);
+            text(OV_X + 16, OV_Y + 60, "Start = resume", 0xff9FE6A0, 13, 20);
+            text(OV_X + 16, OV_Y + 86, "Select = new game", 0xff9FE6A0, 13, 20);
+            tiny3d_Flip();
+            audio_update();
+            continue;
+        }
 
         // ---- drive the engine ----
         GameState s = game.get_state();
@@ -495,9 +529,19 @@ int main(void) {
                     // raise cash via L2 (mgmtAllowed); O declares bankruptcy
                     if (eO) { iface.resign(c); advanced = 1; }
                     break;
-                // auto-resolved for now (interactive UI in later milestones):
+                case TurnPhase::WaitingForTradeOfferResponse:
+                    if (eX) {   // accept: send the reciprocal (matching) offer back
+                        Trade pend = s.get_pending_trade_offer();
+                        Trade rec;
+                        rec.offeringPlayer   = pend.consideringPlayer;
+                        rec.consideringPlayer = pend.offeringPlayer;
+                        rec.offer         = pend.consideration;
+                        rec.consideration = pend.offer;
+                        iface.propose_trade(rec); advanced = 1; audio_play_blip();
+                    } else if (eO) { iface.decline_trade(c); advanced = 1; }
+                    break;
+                // auto-resolved for now:
                 case TurnPhase::WaitingForAcquisitionManagement: iface.end_turn(c);      advanced = 1; break;
-                case TurnPhase::WaitingForTradeOfferResponse:    iface.decline_trade(c); advanced = 1; break;
                 default: break;
             }
             if (advanced) game.process();
