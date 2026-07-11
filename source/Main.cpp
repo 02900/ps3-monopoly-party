@@ -22,7 +22,10 @@
 // no system headers get dragged into this extern "C" block.
 extern "C" {
 #include "ttf_render.h"
+void ya2d_init(void);          // ya2d.h lacks a C-linkage guard; declare what we use
 }
+
+#include "ui/ui.h"             // plain-C bridge to the Clay UI (has its own extern "C")
 
 #include "PS3Interface.h"
 #include "engine/Game.h"
@@ -437,6 +440,7 @@ int main(void) {
     sysUtilRegisterCallback(SYSUTIL_EVENT_SLOT0, sys_cb, NULL);
 
     tiny3d_Init(1024 * 1024);
+    ya2d_init();                        // clay-ps3's renderer draws via ya2d
     audio_init();
     ioPadInit(7);
 
@@ -444,6 +448,8 @@ int main(void) {
     g_ttf_texture = (u32 *) tiny3d_AllocTexture(1600 * 32 * 32 * 2 + 4096);
     init_ttf_table((u16 *) g_ttf_texture);
     TTFLoadFont(0, (char *)"/dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF", NULL, 0);
+
+    ui_init(SCREEN_W, SCREEN_H);        // Clay arena + text-measure callback
 
     // Release builds seed the dice RNG from the clock so each session differs; the
     // NETTEST build keeps a fixed seed so the e2e suite stays deterministic.
@@ -668,6 +674,8 @@ int main(void) {
         else if (tradeOpen) draw_trade_fg(s, s.get_controlling_player_index(),
                                           tradeTarget, tradeDeedSel, tradeCash);
         else                draw_overlay_fg(s, bidAmount);
+
+        ui_render_smoke();        // P1: Clay panel over the board — proves the pipeline
 
         tiny3d_Flip();
         audio_update();

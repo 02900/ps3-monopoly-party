@@ -27,9 +27,9 @@ include $(PSL1GHT)/ppu_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/engine
+SOURCES		:=	source source/engine source/ui extern/clay-ps3
 DATA		:=	data
-INCLUDES	:=	include source/engine
+INCLUDES	:=	include source source/engine source/ui extern/clay-ps3
 PKGFILES	:=	pkgfiles
 
 #---------------------------------------------------------------------------------
