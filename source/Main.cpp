@@ -27,6 +27,7 @@ extern "C" {
 #include "engine/Game.h"
 #include "engine/GameState.h"
 #include "engine/Board.h"
+#include "engine/DisplayStrings.h"   // to_string(Property/Space/…)
 
 #include <string>
 
@@ -114,6 +115,17 @@ static void draw_board(const GameState &s, int playerCount) {
         if (space_is_property(sp))
             col = group_color(property_group(space_to_property(sp)));
         fill_rect(x + 1, y + 1, CELL - 2, CELL - 2, col);
+
+        // owner marker (corner square in the owner's colour; dimmed if mortgaged)
+        if (space_is_property(sp)) {
+            Property prop = space_to_property(sp);
+            int owner = s.get_property_owner_index(prop);
+            if (owner >= 0) {
+                fill_rect(x + 3, y + 3, 10, 10, INK);
+                fill_rect(x + 4, y + 4, 8, 8,
+                          s.get_property_is_mortgaged(prop) ? 0xff707070 : PLAYER_COL[owner]);
+            }
+        }
     }
 
     // tokens (2x2 cluster inside the owner's square)
@@ -155,13 +167,60 @@ static void draw_hud(const GameState &s, int playerCount) {
     const char *prompt = "";
     if (s.is_game_over())                                         prompt = "GAME OVER";
     else switch (s.get_turn_phase()) {
-        case TurnPhase::WaitingForRoll:    prompt = "Press X to ROLL";     break;
-        case TurnPhase::WaitingForTurnEnd: prompt = "Press X to end turn"; break;
-        default:                           prompt = "...";                 break;
+        case TurnPhase::WaitingForRoll:             prompt = "Press X to ROLL";     break;
+        case TurnPhase::WaitingForTurnEnd:          prompt = "Press X to end turn"; break;
+        case TurnPhase::WaitingForBuyPropertyInput: prompt = "Buy or auction?";     break;
+        case TurnPhase::WaitingForBids:             prompt = "Auction!";            break;
+        default:                                    prompt = "...";                 break;
     }
     char pl[80];
     std::snprintf(pl, sizeof pl, "P%d: %s", s.get_controlling_player_index() + 1, prompt);
     text(HX, y, pl, 0xffFFE082, 12, 18);
+}
+
+// ---- interactive overlays (buy / auction) ---------------------------------
+// A centred modal in the (now clear) board centre. Split into background quads
+// and foreground text so all quads precede all text in the frame.
+static const int OV_X = BOARD_X0 + CELL + 6;
+static const int OV_Y = BOARD_Y0 + 3 * CELL;
+static const int OV_W = CELL * 9 - 12;
+static const int OV_H = CELL * 4;
+
+static void draw_overlay_bg(const GameState &s) {
+    TurnPhase ph = s.get_turn_phase();
+    if (ph != TurnPhase::WaitingForBuyPropertyInput && ph != TurnPhase::WaitingForBids)
+        return;
+    fill_rect(OV_X - 2, OV_Y - 2, OV_W + 4, OV_H + 4, 0xffF5F0E1);   // border
+    fill_rect(OV_X,     OV_Y,     OV_W,     OV_H,     0xff1B2A38);   // panel
+}
+
+static void draw_overlay_fg(const GameState &s, int bidAmount) {
+    const int tx = OV_X + 16;
+    int ty = OV_Y + 14;
+    const int c = s.get_controlling_player_index();
+
+    if (s.get_turn_phase() == TurnPhase::WaitingForBuyPropertyInput) {
+        Property prop = space_to_property(s.get_player_position(s.get_active_player_index()));
+        char l[80];
+        std::snprintf(l, sizeof l, "P%d landed on", c + 1);
+        text(tx, ty, l, 0xffFFFFFF, 13, 20); ty += 30;
+        text(tx, ty, to_string(prop).c_str(), 0xffFFE082, 15, 24); ty += 34;
+        std::snprintf(l, sizeof l, "Buy for $%d ?", price_of_property(prop));
+        text(tx, ty, l, 0xffFFFFFF, 14, 22); ty += 34;
+        text(tx, ty, "X = Buy     O = Auction", 0xff9FE6A0, 13, 20);
+    } else if (s.get_turn_phase() == TurnPhase::WaitingForBids) {
+        Auction a = s.get_current_auction();
+        Property ap = a.property;
+        char l[80];
+        std::snprintf(l, sizeof l, "AUCTION: %s", monopoly::to_string(ap).c_str());
+        text(tx, ty, l, 0xffFFE082, 14, 22); ty += 30;
+        std::snprintf(l, sizeof l, "High bid: $%d", a.highestBid);
+        text(tx, ty, l, 0xffFFFFFF, 13, 20); ty += 28;
+        std::snprintf(l, sizeof l, "P%d bid: $%d", c + 1, bidAmount);
+        text(tx, ty, l, PLAYER_COL[c], 14, 22); ty += 30;
+        text(tx, ty, "Up/Dn +-10   Lt/Rt +-50", 0xffCCCCCC, 12, 18); ty += 24;
+        text(tx, ty, "X = Bid     O = Pass", 0xff9FE6A0, 13, 20);
+    }
 }
 
 // ---- main ------------------------------------------------------------------
@@ -185,20 +244,24 @@ int main(void) {
     Game game(&iface);
     game.process();                     // settle to the first WaitingForRoll
 
-    int prevCross = 0;
+    int prev[6] = {0,0,0,0,0,0};    // X, O, Up, Dn, Lt, Rt
+    int bidAmount = 0;              // current bidder's entry during an auction
 
     while (g_running) {
         sysUtilCheckCallback();
 
-        int cross = 0;
+        int cur[6] = {0,0,0,0,0,0};
         ioPadGetInfo(&pad_info);
         if (pad_info.status[0]) {
             ioPadGetData(0, &pad_data);
             if (pad_data.BTN_START) g_running = 0;
-            cross = pad_data.BTN_CROSS;
+            cur[0] = pad_data.BTN_CROSS;  cur[1] = pad_data.BTN_CIRCLE;
+            cur[2] = pad_data.BTN_UP;     cur[3] = pad_data.BTN_DOWN;
+            cur[4] = pad_data.BTN_LEFT;   cur[5] = pad_data.BTN_RIGHT;
         }
-        int crossEdge = cross && !prevCross;
-        prevCross = cross;
+        int edge[6];
+        for (int i = 0; i < 6; ++i) { edge[i] = cur[i] && !prev[i]; prev[i] = cur[i]; }
+        const int eX = edge[0], eO = edge[1], eUp = edge[2], eDn = edge[3], eLt = edge[4], eRt = edge[5];
 
         // ---- drive the engine ----
         GameState s = game.get_state();
@@ -207,32 +270,51 @@ int main(void) {
             int advanced = 0;
             switch (s.get_turn_phase()) {
                 case TurnPhase::WaitingForRoll:
-                    if (crossEdge) { iface.roll_dice(c); advanced = 1; audio_play_blip(); }
+                    if (eX) { iface.roll_dice(c); advanced = 1; audio_play_blip(); }
                     break;
                 case TurnPhase::WaitingForTurnEnd:
-                    if (crossEdge) { iface.end_turn(c); advanced = 1; }
+                    if (eX) { iface.end_turn(c); advanced = 1; }
                     break;
-                // auto-resolved in M1 (interactive UI in later milestones):
-                case TurnPhase::WaitingForBuyPropertyInput:      iface.auction_property(c); advanced = 1; break;
-                case TurnPhase::WaitingForBids:                  iface.decline_bid(c);      advanced = 1; break;
-                case TurnPhase::WaitingForAcquisitionManagement: iface.end_turn(c);         advanced = 1; break;
-                case TurnPhase::WaitingForDebtSettlement:        iface.resign(c);           advanced = 1; break;
-                case TurnPhase::WaitingForTradeOfferResponse:    iface.decline_trade(c);    advanced = 1; break;
+                case TurnPhase::WaitingForBuyPropertyInput:
+                    if (eX)      { iface.buy_property(c);     advanced = 1; audio_play_blip(); }
+                    else if (eO) { iface.auction_property(c); advanced = 1; }
+                    break;
+                case TurnPhase::WaitingForBids: {
+                    Auction a = s.get_current_auction();
+                    int minBid = a.highestBid + 1;
+                    if (bidAmount < minBid) bidAmount = a.highestBid + 10;   // default raise
+                    if (eUp) bidAmount += 10;
+                    if (eDn) bidAmount -= 10;
+                    if (eRt) bidAmount += 50;
+                    if (eLt) bidAmount -= 50;
+                    int funds = s.get_player_funds(c);
+                    if (bidAmount < minBid) bidAmount = minBid;
+                    if (bidAmount > funds)  bidAmount = funds;
+                    if (eX)      { iface.bid(c, bidAmount); bidAmount = 0; advanced = 1; audio_play_blip(); }
+                    else if (eO) { iface.decline_bid(c);    bidAmount = 0; advanced = 1; }
+                    break;
+                }
+                // auto-resolved for now (interactive UI in later milestones):
+                case TurnPhase::WaitingForAcquisitionManagement: iface.end_turn(c);      advanced = 1; break;
+                case TurnPhase::WaitingForDebtSettlement:        iface.resign(c);        advanced = 1; break;
+                case TurnPhase::WaitingForTradeOfferResponse:    iface.decline_trade(c); advanced = 1; break;
                 default: break;
             }
             if (advanced) game.process();
         }
 
-        // ---- render ----
+        // ---- render (all quads first, then all text) ----
         s = game.get_state();
         tiny3d_Clear(CLEAR, TINY3D_CLEAR_ALL);
         tiny3d_Project2D();
 
         draw_board(s, iface.player_count());
+        draw_overlay_bg(s);
 
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
         draw_hud(s, iface.player_count());
+        draw_overlay_fg(s, bidAmount);
 
         tiny3d_Flip();
         audio_update();
