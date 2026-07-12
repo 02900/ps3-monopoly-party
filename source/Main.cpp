@@ -112,6 +112,31 @@ static void fill_rect(int x, int y, int w, int h, u32 color) {
     tiny3d_End();
 }
 
+// ---- small board TTF text (needs reset_ttf_frame()/set_ttf_window() this frame) --
+// colour is opaque ARGB; sw/sh are the per-glyph width/height.
+static void board_text(int x, int y, const char *str, u32 argb, int sw, int sh) {
+    display_ttf_string(x, y, str, argb_to_rgba(argb), 0, sw, sh);
+}
+// Pixel width of `str` at (sw,sh) — colour 0 measures without drawing.
+static int board_text_w(const char *str, int sw, int sh) {
+    return display_ttf_string(0, 0, str, 0, 0, sw, sh);
+}
+// Copy as many leading chars of `in` as fit within `maxpx` into `out` (cap incl. NUL).
+static void fit_text(const char *in, char *out, int cap, int maxpx, int sw, int sh) {
+    int n = 0;
+    out[0] = 0;
+    while (in[n] && n < cap - 1) {
+        out[n] = in[n]; out[n + 1] = 0;
+        if (board_text_w(out, sw, sh) > maxpx) { out[n] = 0; break; }
+        ++n;
+    }
+}
+// Draw `str` horizontally centred within [x, x+w) at vertical `y`.
+static void board_text_centered(int x, int w, int y, const char *str, u32 argb, int sw, int sh) {
+    int tw = board_text_w(str, sw, sh);
+    board_text(x + (w - tw) / 2, y, str, argb, sw, sh);
+}
+
 // ---- rendering (board = the raw "scene"; HUD/overlays are Clay, see source/ui) --
 static void draw_board(const GameState &s, int playerCount, int theme) {
     // squares
@@ -120,14 +145,29 @@ static void draw_board(const GameState &s, int playerCount, int theme) {
         int x = BOARD_X0 + c * CELL;
         int y = BOARD_Y0 + r * CELL;
         Space sp = index_to_space(i);
-        u32 col = BOARD_TAN;
-        if (space_is_property(sp))
-            col = group_color(property_group(space_to_property(sp)));
-        fill_rect(x + 1, y + 1, CELL - 2, CELL - 2, col);
+        // Cell background is always the board colour; the 1px inset reads as a gridline.
+        fill_rect(x + 1, y + 1, CELL - 2, CELL - 2, BOARD_TAN);
 
-        // owner marker (corner square in the owner's colour; dimmed if mortgaged)
         if (space_is_property(sp)) {
-            Property prop = space_to_property(sp);
+            Property prop  = space_to_property(sp);
+            PropertyGroup g = property_group(prop);
+            int colored = (g != PropertyGroup::Railroad && g != PropertyGroup::Utility);
+
+            // Coloured groups: a colour band across the top + the (abbreviated) name.
+            if (colored) {
+                const int BAND = 9;
+                fill_rect(x + 1, y + 1, CELL - 2, BAND, group_color(g));
+                char name[24];
+                fit_text(to_string(prop).c_str(), name, sizeof name, CELL - 4, 5, 8);
+                board_text_centered(x + 1, CELL - 2, y + BAND + 3, name, INK, 5, 8);
+            }
+
+            // Price at the bottom-centre for every property (colour groups + RR/util).
+            char price[8];
+            std::snprintf(price, sizeof price, "$%d", price_of_property(prop));
+            board_text_centered(x + 1, CELL - 2, y + CELL - 12, price, INK, 6, 9);
+
+            // owner marker (top-left corner in the owner's colour; dimmed if mortgaged)
             int owner = s.get_property_owner_index(prop);
             if (owner >= 0) {
                 fill_rect(x + 3, y + 3, 10, 10, INK);
@@ -544,9 +584,9 @@ int main(void) {
         snap.tokenTheme = gameTheme;
 
         ui_begin_frame(CLEAR);
-        draw_board(s, iface.player_count(), gameTheme);   // raw scene, under the Clay UI
-        reset_ttf_frame();
+        reset_ttf_frame();                       // one TTF reset covers board text + Clay
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
+        draw_board(s, iface.player_count(), gameTheme);   // raw scene, under the Clay UI
         ui_render_game(&snap);                   // Clay HUD + overlays (does clay_render)
 
         tiny3d_Flip();
