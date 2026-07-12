@@ -58,7 +58,23 @@ static void hud_build(const UiSnapshot *s) {
 
         CLAY(CLAY_ID("HudGap1"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(8) } } }) {}
         TXT(fmtl("On:  %s", s->spaceName), UI_TEXT_DIM, 15);
-        if (s->die1 > 0) TXT(fmtl("Dice: %d + %d = %d", s->die1, s->die2, s->die1 + s->die2), UI_TEXT, 15);
+        if (s->die1 > 0) {
+            void *d1 = ui_image(ui_img_dice(s->die1));
+            void *d2 = ui_image(ui_img_dice(s->die2));
+            CLAY(CLAY_ID("DiceRow"), {
+                .layout = { .childGap = 8, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }
+            }) {
+                TXT("Dice:", UI_TEXT_DIM, 15);
+                if (d1 && d2) {
+                    CLAY(CLAY_ID("Die1"), { .layout = { .sizing = { CLAY_SIZING_FIXED(28), CLAY_SIZING_FIXED(28) } },
+                                            .image = { .imageData = d1 } }) {}
+                    CLAY(CLAY_ID("Die2"), { .layout = { .sizing = { CLAY_SIZING_FIXED(28), CLAY_SIZING_FIXED(28) } },
+                                            .image = { .imageData = d2 } }) {}
+                } else {
+                    TXT(fmtl("%d + %d = %d", s->die1, s->die2, s->die1 + s->die2), UI_TEXT, 15);
+                }
+            }
+        }
 
         CLAY(CLAY_ID("HudGap2"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(10) } } }) {}
         const char *prompt = "...";

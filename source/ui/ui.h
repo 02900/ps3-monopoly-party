@@ -69,6 +69,9 @@ void ui_images_load(void);
 // board tokens). Returns 0 if that sprite isn't loaded, so the caller can fall back
 // to a coloured square. Must run inside the tiny3d 2D frame (blending on).
 int ui_draw_token(int theme, int token, int x, int y, int size);
+// Draw the board-centre art / a space's icon (jail/tax/rr/util) with ya2d; 0 if none.
+int ui_draw_board_center(int x, int y, int size);
+int ui_draw_space_icon(int space_index, int x, int y, int size);
 
 // Clear + enable alpha blending + 2D projection. Call at the top of every frame,
 // before drawing the board and before the Clay render (blending is required so TTF

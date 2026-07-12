@@ -33,7 +33,9 @@ int ui_img_token(int theme, int token) {
 
 // ---- embedded PNGs (bin2o: data/foo.png -> foo_png / foo_png_size) ----------
 #define PNG(sym) extern const unsigned char sym##_png[]; extern const unsigned int sym##_png_size;
-PNG(logo) PNG(menu_bg)
+PNG(logo) PNG(menu_bg) PNG(board_face)
+PNG(dice_1) PNG(dice_2) PNG(dice_3) PNG(dice_4) PNG(dice_5) PNG(dice_6)
+PNG(icon_jail) PNG(icon_tax) PNG(icon_rr) PNG(icon_util)
 PNG(tok_classic_car) PNG(tok_classic_boot) PNG(tok_classic_hat)
 PNG(tok_classic_iron) PNG(tok_classic_battleship) PNG(tok_classic_dog)
 PNG(tok_fantasy_dwarf) PNG(tok_fantasy_wizard) PNG(tok_fantasy_troll)
@@ -60,8 +62,15 @@ static void load_slot(int id, const unsigned char *buf, unsigned int size) {
 #define LOAD(id, sym) load_slot((id), sym##_png, sym##_png_size)
 
 void ui_images_load(void) {
-    LOAD(UI_IMG_LOGO, logo);
-    LOAD(UI_IMG_BG,   menu_bg);
+    LOAD(UI_IMG_LOGO,  logo);
+    LOAD(UI_IMG_BG,    menu_bg);
+    LOAD(UI_IMG_BOARD, board_face);
+
+    LOAD(UI_IMG_DICE + 0, dice_1); LOAD(UI_IMG_DICE + 1, dice_2); LOAD(UI_IMG_DICE + 2, dice_3);
+    LOAD(UI_IMG_DICE + 3, dice_4); LOAD(UI_IMG_DICE + 4, dice_5); LOAD(UI_IMG_DICE + 5, dice_6);
+
+    LOAD(UI_IMG_ICON + 0, icon_jail); LOAD(UI_IMG_ICON + 1, icon_tax);
+    LOAD(UI_IMG_ICON + 2, icon_rr);   LOAD(UI_IMG_ICON + 3, icon_util);
 
     LOAD(ui_img_token(UI_THEME_CLASSIC, 0), tok_classic_car);
     LOAD(ui_img_token(UI_THEME_CLASSIC, 1), tok_classic_boot);
@@ -104,13 +113,36 @@ void *ui_image(int id) {
     return g_images[id].tex ? &g_images[id] : 0;   // NULL when not loaded -> Clay skips it
 }
 
-// Draw a token sprite with ya2d (for the raw board tokens). Returns 0 if the sprite
-// isn't loaded so the caller can fall back to a coloured square. Must be called
-// inside the tiny3d 2D frame (after Project2D, with blending on).
-int ui_draw_token(int theme, int token, int x, int y, int size) {
-    int id = ui_img_token(theme, token);
-    if (id < 0 || !g_images[id].tex) return 0;
+int ui_img_dice(int face) {
+    return (face >= 1 && face <= 6) ? UI_IMG_DICE + (face - 1) : -1;
+}
+
+// Board space 0..39 -> icon image id (jail / tax / railroad / utility), or -1.
+int ui_space_icon_id(int sp) {
+    switch (sp) {
+        case 10: case 30: return UI_IMG_ICON + 0;               // Jail / Go To Jail
+        case 4:  case 38: return UI_IMG_ICON + 1;               // Income / Luxury Tax
+        case 5:  case 15: case 25: case 35: return UI_IMG_ICON + 2;  // railroads
+        case 12: case 28: return UI_IMG_ICON + 3;               // utilities
+    }
+    return -1;
+}
+
+// Draw a registry image with ya2d scaled to `size`px width. Returns 0 if not loaded
+// (caller falls back). Must run inside the tiny3d 2D frame (blending on).
+static int draw_image(int id, int x, int y, int size) {
+    if (id < 0 || id >= UI_IMG_COUNT || !g_images[id].tex) return 0;
     float scale = (float) size / g_images[id].src_w;
     ya2d_drawTextureZ((ya2d_Texture *) g_images[id].tex, x, y, 0, scale);
     return 1;
+}
+
+int ui_draw_token(int theme, int token, int x, int y, int size) {
+    return draw_image(ui_img_token(theme, token), x, y, size);
+}
+int ui_draw_board_center(int x, int y, int size) {
+    return draw_image(UI_IMG_BOARD, x, y, size);
+}
+int ui_draw_space_icon(int space_index, int x, int y, int size) {
+    return draw_image(ui_space_icon_id(space_index), x, y, size);
 }

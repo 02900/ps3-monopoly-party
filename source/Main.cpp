@@ -135,7 +135,12 @@ static void draw_board(const GameState &s, int playerCount, int theme) {
                           s.get_property_is_mortgaged(prop) ? 0xff707070 : PLAYER_COL[owner]);
             }
         }
+        // special-square icon (jail / tax / railroad / utility), centred; no-op otherwise
+        ui_draw_space_icon(i, x + (CELL - 24) / 2, y + (CELL - 24) / 2, 24);
     }
+
+    // board-centre art (fills the inner 9x9 region, above the navy panel)
+    ui_draw_board_center(BOARD_X0 + CELL + 1, BOARD_Y0 + CELL + 1, CELL * 9 - 2);
 
     // tokens (2x2 cluster inside the square): the theme sprite, or a coloured square
     for (int p = 0; p < playerCount; ++p) {
