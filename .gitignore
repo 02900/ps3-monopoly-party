@@ -24,3 +24,7 @@ last_frame*
 tiles
 *.code-workspace
 *.pyc
+
+# Asset generator (scripts/asset_gen)
+scripts/asset_gen/.venv/
+scripts/asset_gen/.cache/

@@ -59,11 +59,20 @@ static void build_title(void) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 14,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG
+        .backgroundColor = UI_BG,
+        .image = { .imageData = ui_image(UI_IMG_BG) }
     }) {
-        CLAY_TEXT(ui_str("MONOPOLY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 30 }));
-        CLAY_TEXT(ui_str("PARTY  -  PS3"), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 24 }));
-        CLAY(CLAY_ID("TitleGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(30) } } }) {}
+        // logo image; falls back to the wordmark text if it isn't loaded
+        if (ui_image(UI_IMG_LOGO)) {
+            CLAY(CLAY_ID("Logo"), {
+                .layout = { .sizing = { CLAY_SIZING_FIXED(400), CLAY_SIZING_FIXED(125) } },
+                .image = { .imageData = ui_image(UI_IMG_LOGO) }
+            }) {}
+        } else {
+            CLAY_TEXT(ui_str("MONOPOLY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 30 }));
+            CLAY_TEXT(ui_str("PARTY  -  PS3"), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 24 }));
+        }
+        CLAY(CLAY_ID("TitleGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(20) } } }) {}
         hint("Press  START");
     }
 }
@@ -73,7 +82,8 @@ static void build_menu(int cross, UiAction *result) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 12,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG
+        .backgroundColor = UI_BG,
+        .image = { .imageData = ui_image(UI_IMG_BG) }
     }) {
         title_bar("MONOPOLY PARTY");
         if (menu_item(CLAY_ID("MenuNew"),  "New Game",    cross)) g_screen = SCR_SETUP;
@@ -92,7 +102,8 @@ static void build_setup(int hdir, int cross, UiAction *result) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 12,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG
+        .backgroundColor = UI_BG,
+        .image = { .imageData = ui_image(UI_IMG_BG) }
     }) {
         title_bar("NEW GAME");
 
@@ -154,7 +165,8 @@ static void build_howto(void) {
     CLAY(CLAY_ID("Root"), {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .padding = CLAY_PADDING_ALL(40), .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 10 },
-        .backgroundColor = UI_BG
+        .backgroundColor = UI_BG,
+        .image = { .imageData = ui_image(UI_IMG_BG) }
     }) {
         CLAY_TEXT(ui_str("HOW TO PLAY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 26 }));
         CLAY(CLAY_ID("HowGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(12) } } }) {}

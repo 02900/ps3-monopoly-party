@@ -33,8 +33,9 @@ static void hud_player_row(const UiSnapshot *s, int p) {
         .border = { .color = UI_ACCENT, .width = CLAY_BORDER_OUTSIDE(active ? 2 : 0) }
     }) {
         CLAY(CLAY_IDI("HudChip", p), {
-            .layout = { .sizing = { CLAY_SIZING_FIXED(16), CLAY_SIZING_FIXED(16) } },
-            .backgroundColor = s->eliminated[p] ? ui_rgba(0x555555ff) : ui_player_color(p)
+            .layout = { .sizing = { CLAY_SIZING_FIXED(24), CLAY_SIZING_FIXED(24) } },
+            .backgroundColor = s->eliminated[p] ? ui_rgba(0x555555ff) : ui_player_color(p),
+            .image = { .imageData = ui_image(ui_img_token(s->tokenTheme, p)) }
         }) {}
         TXT(fmtl("P%d %s", p + 1, ui_token_name(s->tokenTheme, p)),
             s->eliminated[p] ? UI_TEXT_MUTE : UI_TEXT, 16);

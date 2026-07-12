@@ -113,7 +113,7 @@ static void fill_rect(int x, int y, int w, int h, u32 color) {
 }
 
 // ---- rendering (board = the raw "scene"; HUD/overlays are Clay, see source/ui) --
-static void draw_board(const GameState &s, int playerCount) {
+static void draw_board(const GameState &s, int playerCount, int theme) {
     // squares
     for (int i = 0; i < 40; ++i) {
         int c, r; cell_of(i, &c, &r);
@@ -137,14 +137,17 @@ static void draw_board(const GameState &s, int playerCount) {
         }
     }
 
-    // tokens (2x2 cluster inside the owner's square)
+    // tokens (2x2 cluster inside the square): the theme sprite, or a coloured square
     for (int p = 0; p < playerCount; ++p) {
+        if (s.get_player_eliminated(p)) continue;
         int i = space_to_index(s.get_player_position(p));
         int c, r; cell_of(i, &c, &r);
-        int x = BOARD_X0 + c * CELL + 6 + (p % 2) * 16;
-        int y = BOARD_Y0 + r * CELL + 6 + (p / 2) * 16;
-        fill_rect(x - 1, y - 1, 15, 15, INK);              // outline
-        fill_rect(x, y, 13, 13, PLAYER_COL[p]);
+        int x = BOARD_X0 + c * CELL + 3 + (p % 2) * 19;
+        int y = BOARD_Y0 + r * CELL + 3 + (p / 2) * 19;
+        if (!ui_draw_token(theme, p, x, y, 18)) {
+            fill_rect(x - 1, y - 1, 15, 15, INK);          // outline
+            fill_rect(x, y, 13, 13, PLAYER_COL[p]);
+        }
     }
 }
 
@@ -536,7 +539,7 @@ int main(void) {
         snap.tokenTheme = gameTheme;
 
         ui_begin_frame(CLEAR);
-        draw_board(s, iface.player_count());     // raw scene, under the Clay UI
+        draw_board(s, iface.player_count(), gameTheme);   // raw scene, under the Clay UI
         reset_ttf_frame();
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
         ui_render_game(&snap);                   // Clay HUD + overlays (does clay_render)

@@ -62,8 +62,13 @@ typedef struct {
 // Create Clay's arena + text-measure callback. Call once, after ya2d + ttf init.
 void ui_init(int screen_w, int screen_h);
 
-// Load any embedded image assets (stub until the art pass; safe no-op).
+// Load the embedded image assets into the registry. Call once, after ya2d init.
 void ui_images_load(void);
+
+// Draw a player's token sprite with ya2d at (x,y) scaled to `size`px (for the raw
+// board tokens). Returns 0 if that sprite isn't loaded, so the caller can fall back
+// to a coloured square. Must run inside the tiny3d 2D frame (blending on).
+int ui_draw_token(int theme, int token, int x, int y, int size);
 
 // Clear + enable alpha blending + 2D projection. Call at the top of every frame,
 // before drawing the board and before the Clay render (blending is required so TTF

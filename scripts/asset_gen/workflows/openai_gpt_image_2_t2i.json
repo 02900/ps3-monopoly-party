@@ -1,0 +1,32 @@
+{
+  "268": {
+    "inputs": {
+      "prompt": "",
+      "seed": 0,
+      "quality": "high",
+      "background": "auto",
+      "size": "Custom",
+      "n": 1,
+      "model": "gpt-image-2",
+      "custom_width": 1024,
+      "custom_height": 1024
+    },
+    "class_type": "OpenAIGPTImage1",
+    "_meta": {
+      "title": "OpenAI GPT Image 2"
+    }
+  },
+  "269": {
+    "inputs": {
+      "filename_prefix": "ps3monopoly",
+      "images": [
+        "268",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
