@@ -29,7 +29,7 @@ TRANSPARENT_NOTE = (
     "matte), about 10% padding."
 )
 
-# ── Full-screen menu backgrounds (composited under a ~66% navy scrim in-engine) ─
+# ── Full-screen menu backgrounds (composited under a ~40% navy scrim in-engine) ─
 # These are hero/key-art plates, NOT the flat "non-distracting" felt — the engine
 # darkens them, so they can be rich. Each keeps a specific area calm for the UI.
 BG_TAIL = (

@@ -423,6 +423,7 @@ int main(void) {
         // ---- menu system (title / main menu / setup / how-to) ----
         if (ui_in_menu()) {
             ui_begin_frame(CLEAR);
+            ui_menu_bg();                    // full-screen art under the Clay menu
             reset_ttf_frame();
             set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
             UiGameConfig cfg;

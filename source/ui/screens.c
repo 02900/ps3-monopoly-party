@@ -23,6 +23,20 @@ void ui_force_game(void) { g_inGame = 1; }
 // ---- small building blocks -------------------------------------------------
 static unsigned g_tick = 0;   // frame counter (blink/pulse); advanced each menu frame
 
+// Draw the current screen's full-screen background art (called from the game
+// loop before the Clay menu, since the menu roots are transparent). Falls back
+// to the shared menu_bg plate if the per-screen one isn't loaded.
+void ui_menu_bg(void) {
+    int id;
+    switch (g_screen) {
+        case SCR_TITLE: id = UI_IMG_BG_TITLE; break;
+        case SCR_MENU:  id = UI_IMG_BG_MENU;  break;
+        case SCR_SETUP: id = UI_IMG_BG_MENU;  break;   // setup shares the menu plate
+        default:        id = UI_IMG_BG_HOWTO; break;
+    }
+    if (!ui_draw_cover(id)) ui_draw_cover(UI_IMG_BG);
+}
+
 static void title_bar(const char *text) {
     CLAY(CLAY_ID("TitleBar"), {
         .layout = { .padding = { 16, 16, 10, 10 }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER } }
@@ -39,7 +53,7 @@ static void scrim(void) {
                       .attachPoints = { CLAY_ATTACH_POINT_LEFT_TOP, CLAY_ATTACH_POINT_LEFT_TOP },
                       .offset = { 0, 0 }, .zIndex = -10 },
         .layout = { .sizing = { CLAY_SIZING_FIXED(848), CLAY_SIZING_FIXED(512) } },
-        .backgroundColor = ui_rgba(0x0A1322aa)
+        .backgroundColor = ui_rgba(0x0A132266)
     }) {}
 }
 
@@ -90,8 +104,7 @@ static void build_title(void) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 10,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG,
-        .image = { .imageData = ui_image(UI_IMG_BG) }
+        .backgroundColor = ui_rgba(0x00000000)   // transparent: ya2d bg shows through
     }) {
         scrim();
         // logo image; falls back to the wordmark text if it isn't loaded
@@ -104,12 +117,24 @@ static void build_title(void) {
             CLAY_TEXT(ui_str("MONOPOLY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 30 }));
             CLAY_TEXT(ui_str("PARTY"), CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 26 }));
         }
-        CLAY_TEXT(ui_str("The classic board game  -  hot-seat for up to 4"),
-                  CLAY_TEXT_CONFIG({ .textColor = UI_TEXT_DIM, .fontSize = 16 }));
-        CLAY(CLAY_ID("TitleGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(34) } } }) {}
-        // blinking call-to-action (colour pulse only -> no layout shift)
-        Clay_Color cta = ((g_tick / 22) % 2 == 0) ? UI_ACCENT : ui_rgba(0xE8B84B44);
-        CLAY_TEXT(ui_str("PRESS   START"), CLAY_TEXT_CONFIG({ .textColor = cta, .fontSize = 24 }));
+        // subtitle on a dark pill so it stays legible over the busy hero art
+        CLAY(CLAY_ID("TitleSub"), {
+            .layout = { .padding = { 14, 14, 6, 6 } },
+            .backgroundColor = ui_rgba(0x0A1322b4)
+        }) {
+            CLAY_TEXT(ui_str("The classic board game   -   hot-seat for up to 4"),
+                      CLAY_TEXT_CONFIG({ .textColor = UI_TEXT, .fontSize = 16 }));
+        }
+        CLAY(CLAY_ID("TitleGap"), { .layout = { .sizing = { CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(30) } } }) {}
+        // blinking call-to-action on a bordered pill (colour pulse -> no layout shift)
+        Clay_Color cta = ((g_tick / 22) % 2 == 0) ? UI_ACCENT : ui_rgba(0xE8B84B88);
+        CLAY(CLAY_ID("TitleCta"), {
+            .layout = { .padding = { 20, 20, 9, 9 } },
+            .backgroundColor = ui_rgba(0x0A1322c8),
+            .border = { .color = UI_ACCENT, .width = CLAY_BORDER_OUTSIDE(1) }
+        }) {
+            CLAY_TEXT(ui_str("PRESS   START"), CLAY_TEXT_CONFIG({ .textColor = cta, .fontSize = 24 }));
+        }
         footer("MONOPOLY PARTY   -   PS3 homebrew", "jemeador engine");
     }
 }
@@ -119,8 +144,7 @@ static void build_menu(int cross, UiAction *result) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 18,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG,
-        .image = { .imageData = ui_image(UI_IMG_BG) }
+        .backgroundColor = ui_rgba(0x00000000)
     }) {
         scrim();
         // logo (smaller) at the top of the stack; text wordmark as fallback
@@ -156,8 +180,7 @@ static void build_setup(int hdir, int cross, UiAction *result) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 12,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG,
-        .image = { .imageData = ui_image(UI_IMG_BG) }
+        .backgroundColor = ui_rgba(0x00000000)
     }) {
         scrim();
         title_bar("NEW GAME");
@@ -227,8 +250,7 @@ static void build_howto(void) {
         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 14,
                     .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = UI_BG,
-        .image = { .imageData = ui_image(UI_IMG_BG) }
+        .backgroundColor = ui_rgba(0x00000000)
     }) {
         scrim();
         CLAY_TEXT(ui_str("HOW TO PLAY"), CLAY_TEXT_CONFIG({ .textColor = UI_ACCENT, .fontSize = 26 }));

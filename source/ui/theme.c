@@ -34,6 +34,7 @@ int ui_img_token(int theme, int token) {
 // ---- embedded PNGs (bin2o: data/foo.png -> foo_png / foo_png_size) ----------
 #define PNG(sym) extern const unsigned char sym##_png[]; extern const unsigned int sym##_png_size;
 PNG(logo) PNG(menu_bg) PNG(board_face)
+PNG(bg_title) PNG(bg_menu) PNG(bg_howto)
 PNG(dice_1) PNG(dice_2) PNG(dice_3) PNG(dice_4) PNG(dice_5) PNG(dice_6)
 PNG(icon_jail) PNG(icon_tax) PNG(icon_rr) PNG(icon_util)
 PNG(tok_classic_car) PNG(tok_classic_boot) PNG(tok_classic_hat)
@@ -62,9 +63,12 @@ static void load_slot(int id, const unsigned char *buf, unsigned int size) {
 #define LOAD(id, sym) load_slot((id), sym##_png, sym##_png_size)
 
 void ui_images_load(void) {
-    LOAD(UI_IMG_LOGO,  logo);
-    LOAD(UI_IMG_BG,    menu_bg);
-    LOAD(UI_IMG_BOARD, board_face);
+    LOAD(UI_IMG_LOGO,     logo);
+    LOAD(UI_IMG_BG,       menu_bg);
+    LOAD(UI_IMG_BG_TITLE, bg_title);
+    LOAD(UI_IMG_BG_MENU,  bg_menu);
+    LOAD(UI_IMG_BG_HOWTO, bg_howto);
+    LOAD(UI_IMG_BOARD,    board_face);
 
     LOAD(UI_IMG_DICE + 0, dice_1); LOAD(UI_IMG_DICE + 1, dice_2); LOAD(UI_IMG_DICE + 2, dice_3);
     LOAD(UI_IMG_DICE + 3, dice_4); LOAD(UI_IMG_DICE + 4, dice_5); LOAD(UI_IMG_DICE + 5, dice_6);
@@ -133,6 +137,20 @@ int ui_space_icon_id(int sp) {
 static int draw_image(int id, int x, int y, int size) {
     if (id < 0 || id >= UI_IMG_COUNT || !g_images[id].tex) return 0;
     float scale = (float) size / g_images[id].src_w;
+    ya2d_drawTextureZ((ya2d_Texture *) g_images[id].tex, x, y, 0, scale);
+    return 1;
+}
+
+// Draw image `id` scaled to cover the whole 848x512 screen (crop overflow),
+// centred. Used for the menu backgrounds. Returns 0 if the image isn't loaded.
+int ui_draw_cover(int id) {
+    if (id < 0 || id >= UI_IMG_COUNT || !g_images[id].tex) return 0;
+    float sw = g_images[id].src_w, sh = g_images[id].src_h;
+    if (sw <= 0.0f || sh <= 0.0f) return 0;
+    float scale = 512.0f / sh;                        // fill height...
+    if (sw * scale < 848.0f) scale = 848.0f / sw;     // ...then ensure width covers
+    int x = (int)((848.0f - sw * scale) / 2.0f);
+    int y = (int)((512.0f - sh * scale) / 2.0f);
     ya2d_drawTextureZ((ya2d_Texture *) g_images[id].tex, x, y, 0, scale);
     return 1;
 }
