@@ -29,6 +29,18 @@ TRANSPARENT_NOTE = (
     "matte), about 10% padding."
 )
 
+# ── Full-screen menu backgrounds (composited under a ~66% navy scrim in-engine) ─
+# These are hero/key-art plates, NOT the flat "non-distracting" felt — the engine
+# darkens them, so they can be rich. Each keeps a specific area calm for the UI.
+BG_TAIL = (
+    "Modern stylised 3D game render, clean bold shapes, cinematic warm key light with "
+    "soft rim light and gentle depth-of-field bokeh. Palette tied to the Monopoly "
+    "property groups (brown, light blue, magenta, orange, red, yellow, green, blue) "
+    "over deep navy #0E1A2E with a gold #E8B84B accent. Rich and premium but not busy, "
+    "readable at 720p on a TV from the couch. Absolutely no text, letters, numbers or "
+    "words anywhere in the image. 16:9."
+)
+
 
 @dataclass
 class Asset:
@@ -103,6 +115,50 @@ def build_manifest() -> list[Asset]:
         prompt=(
             "Menu backdrop: dark navy felt with a soft vignette, faint Monopoly board "
             "motifs in the corners, non-distracting, no text. " + ART_DIRECTION
+        ),
+        engine="grok",
+    ))
+    # Title screen: logo sits upper-centre, "PRESS START" lower-centre -> keep the
+    # whole vertical centre column calm; put the drama in the lower half + sky.
+    assets.append(Asset(
+        id="bg_title", out="data/bg_title.png", width=1280, height=720, rgba=False,
+        prompt=(
+            "Cinematic title-screen key art for a Monopoly-style party board game. A "
+            "luxurious game board sweeps across the lower half in dramatic 3/4 "
+            "perspective; glossy pewter tokens (top hat, race car, terrier dog, "
+            "battleship), a pair of dice mid-tumble, tiny green houses and red hotels "
+            "catching the light; an art-deco city skyline softly bokeh'd behind; a warm "
+            "golden glow and floating sparkles rising through a teal-to-deep-navy sky. "
+            "Keep the upper-centre and the vertical centre calm and open for a logo and "
+            "a call-to-action. " + BG_TAIL
+        ),
+        engine="grok",
+    ))
+    # Main menu: a ~460px UI panel sits dead-centre -> darken the centre, push the
+    # props to the left/right edges and lower corners.
+    assets.append(Asset(
+        id="bg_menu", out="data/bg_menu.png", width=1280, height=720, rgba=False,
+        prompt=(
+            "Main-menu background for a Monopoly-style party board game. A rich "
+            "board-game table seen from a low 3/4 angle; glossy metal tokens, dice, "
+            "houses and hotels clustered along the left and right edges and the lower "
+            "corners under a warm golden side light; a strong deep-navy vignette that "
+            "darkens toward the middle so a UI panel can sit there. The central vertical "
+            "third stays calm, dark and empty. " + BG_TAIL
+        ),
+        engine="grok",
+    ))
+    # How to Play: a wide rules panel fills the centre -> a tidy flat-lay hugging the
+    # edges, big empty dark centre.
+    assets.append(Asset(
+        id="bg_howto", out="data/bg_howto.png", width=1280, height=720, rgba=False,
+        prompt=(
+            "Calm rules-screen background for a Monopoly-style board game. An elegant "
+            "flat-lay hugging the bottom and side edges: a board corner, neat fanned "
+            "title-deed cards, two dice, a few houses and hotels and a couple of metal "
+            "tokens on deep-navy felt, softly lit, tidy and uncluttered, gentle "
+            "vignette. Keep the whole centre large, dark and empty for a panel of rules "
+            "text. " + BG_TAIL
         ),
         engine="grok",
     ))
