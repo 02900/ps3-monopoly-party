@@ -22,77 +22,149 @@ static const char *fmtl(const char *f, ...) {
 
 #define TXT(s, col, sz) CLAY_TEXT(ui_str(s), CLAY_TEXT_CONFIG({ .textColor = (col), .fontSize = (sz) }))
 
-// ---- HUD (right-side panel) ------------------------------------------------
-static void hud_player_row(const UiSnapshot *s, int p) {
-    int active = (p == s->active);
-    CLAY(CLAY_IDI("HudP", p), {
-        .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(34) },
-                    .padding = { 8, 8, 4, 4 }, .childGap = 10,
-                    .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
-        .backgroundColor = active ? UI_PANEL2 : ui_rgba(0x00000000),
-        .border = { .color = UI_ACCENT, .width = CLAY_BORDER_OUTSIDE(active ? 2 : 0) }
-    }) {
-        CLAY(CLAY_IDI("HudChip", p), {
-            .layout = { .sizing = { CLAY_SIZING_FIXED(24), CLAY_SIZING_FIXED(24) } },
-            .backgroundColor = s->eliminated[p] ? ui_rgba(0x555555ff) : ui_player_color(p),
-            .image = { .imageData = ui_image(ui_img_token(s->tokenTheme, p)) }
-        }) {}
-        TXT(fmtl("P%d %s", p + 1, ui_token_name(s->tokenTheme, p)),
-            s->eliminated[p] ? UI_TEXT_MUTE : UI_TEXT, 16);
-        TXT(fmtl("$%d", s->funds[p]), UI_ACCENT, 18);
-        if (s->eliminated[p]) TXT("OUT", UI_BAD, 14);
-        else if (s->jailed[p] > 0) TXT("JAIL", ui_rgba(0xFFD54Fff), 14);
+// ---- HUD: player cards float over the board corners (see the PS Monopoly look) --
+// The board is now drawn full-screen underneath; the HUD is four corner cards, a
+// top banner and a bottom action bar, all floating on top with alpha blending.
+
+// Which screen corner a player's card anchors to (0 TL, 1 TR, 2 BL, 3 BR) and the
+// inset offset from that corner.
+static void corner_attach(int p, Clay_FloatingAttachPointType *pt, float *ox, float *oy) {
+    const float PAD = 10.0f;
+    switch (p) {
+        case 0:  *pt = CLAY_ATTACH_POINT_LEFT_TOP;     *ox =  PAD; *oy =  PAD; break;
+        case 1:  *pt = CLAY_ATTACH_POINT_RIGHT_TOP;    *ox = -PAD; *oy =  PAD; break;
+        case 2:  *pt = CLAY_ATTACH_POINT_LEFT_BOTTOM;  *ox =  PAD; *oy = -PAD; break;
+        default: *pt = CLAY_ATTACH_POINT_RIGHT_BOTTOM; *ox = -PAD; *oy = -PAD; break;
     }
 }
 
-static void hud_build(const UiSnapshot *s) {
-    CLAY(CLAY_ID("Hud"), {
-        .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
-                    .padding = CLAY_PADDING_ALL(14), .childGap = 6,
-                    .layoutDirection = CLAY_TOP_TO_BOTTOM },
-        .backgroundColor = ui_rgba(0x12202Cd8)
+// A small pill (chip). idx keeps sibling ids unique within a card.
+static void chip(int idx, const char *label, Clay_Color bg, Clay_Color fg) {
+    CLAY(CLAY_IDI("Chip", idx), {
+        .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(20) },
+                    .padding = { 6, 6, 2, 2 },
+                    .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+        .backgroundColor = bg
     }) {
-        TXT("MONOPOLY PARTY", UI_TEXT, 22);
-        CLAY(CLAY_ID("HudGap0"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(6) } } }) {}
-        for (int p = 0; p < s->count; ++p) hud_player_row(s, p);
+        TXT(label, fg, 13);
+    }
+}
 
-        CLAY(CLAY_ID("HudGap1"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(8) } } }) {}
-        TXT(fmtl("On:  %s", s->spaceName), UI_TEXT_DIM, 15);
+// Action pills for the player the game is currently waiting on (the "actor").
+static void actor_chips(const UiSnapshot *s) {
+    const char *primary = 0;
+    switch (s->phase) {
+        case UI_PHASE_ROLL:    primary = s->jailTurns > 0 ? "X: Jail roll" : "X: Roll"; break;
+        case UI_PHASE_TURNEND: primary = "X: End turn"; break;
+        case UI_PHASE_BUY:     primary = "X Buy / O Auc"; break;
+        case UI_PHASE_BIDS:    primary = "X Bid / O Pass"; break;
+        case UI_PHASE_DEBT:    primary = "L2: raise cash"; break;
+        case UI_PHASE_TRADE:   primary = "X/O respond"; break;
+        default: break;
+    }
+    if (primary) chip(0, primary, UI_ROW_FOCUS, UI_TEXT);
+    if (s->phase == UI_PHASE_ROLL || s->phase == UI_PHASE_TURNEND) {
+        chip(1, "L2  Manage", UI_ROW, UI_TEXT_DIM);
+        chip(2, "Tri  Trade", UI_ROW, UI_TEXT_DIM);
+    }
+}
+
+static void player_card(const UiSnapshot *s, int p) {
+    int actor = (p == s->controlling);
+    Clay_FloatingAttachPointType pt; float ox, oy;
+    corner_attach(p, &pt, &ox, &oy);
+    Clay_Color frame = actor ? UI_ACCENT : UI_BORDER;
+    CLAY(CLAY_IDI("Card", p), {
+        .floating = { .attachTo = CLAY_ATTACH_TO_ROOT,
+                      .attachPoints = { .element = pt, .parent = pt },
+                      .offset = { ox, oy } },
+        .layout = { .sizing = { CLAY_SIZING_FIXED(170), CLAY_SIZING_FIT(0) },
+                    .padding = CLAY_PADDING_ALL(8), .childGap = 6,
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM },
+        .backgroundColor = ui_rgba(0x14232Fe6),
+        .border = { .color = frame, .width = CLAY_BORDER_OUTSIDE(actor ? 3 : 1) }
+    }) {
+        // header: token portrait + name / cash
+        CLAY(CLAY_IDI("CardHdr", p), {
+            .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(0) },
+                        .childGap = 8, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }
+        }) {
+            CLAY(CLAY_IDI("CardPic", p), {
+                .layout = { .sizing = { CLAY_SIZING_FIXED(46), CLAY_SIZING_FIXED(46) } },
+                .backgroundColor = s->eliminated[p] ? ui_rgba(0x555555ff) : ui_player_color(p),
+                .border = { .color = UI_BORDER, .width = CLAY_BORDER_OUTSIDE(1) },
+                .image = { .imageData = ui_image(ui_img_token(s->tokenTheme, p)) }
+            }) {}
+            CLAY(CLAY_IDI("CardTxt", p), {
+                .layout = { .layoutDirection = CLAY_TOP_TO_BOTTOM, .childGap = 2 }
+            }) {
+                TXT(fmtl("PLAYER %d", p + 1), s->eliminated[p] ? UI_TEXT_MUTE : UI_TEXT, 15);
+                TXT(fmtl("$%d", s->funds[p]), UI_BAD, 22);   // red cash, PS-Monopoly style
+            }
+        }
+        if (s->eliminated[p])         TXT("BANKRUPT", UI_TEXT_MUTE, 13);
+        else if (s->jailed[p] > 0)    TXT(fmtl("IN JAIL (%d)", s->jailed[p]), ui_rgba(0xFFD54Fff), 13);
+        if (actor && !s->gameOver && !s->eliminated[p]) actor_chips(s);
+    }
+}
+
+// Center-top banner: whose turn + the space they're on + the dice.
+static void top_banner(const UiSnapshot *s) {
+    CLAY(CLAY_ID("TopBanner"), {
+        .floating = { .attachTo = CLAY_ATTACH_TO_ROOT,
+                      .attachPoints = { .element = CLAY_ATTACH_POINT_CENTER_TOP,
+                                        .parent  = CLAY_ATTACH_POINT_CENTER_TOP },
+                      .offset = { 0, 6 } },
+        .layout = { .sizing = { CLAY_SIZING_FIT(0), CLAY_SIZING_FIXED(30) },
+                    .padding = { 14, 14, 4, 4 }, .childGap = 10,
+                    .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+        .backgroundColor = ui_rgba(0x14232Fe6),
+        .border = { .color = UI_ACCENT, .width = CLAY_BORDER_OUTSIDE(1) }
+    }) {
+        TXT(fmtl("P%d", s->active + 1), ui_player_color(s->active), 16);
+        TXT(s->spaceName, UI_TEXT, 16);
         if (s->die1 > 0) {
             void *d1 = ui_image(ui_img_dice(s->die1));
             void *d2 = ui_image(ui_img_dice(s->die2));
-            CLAY(CLAY_ID("DiceRow"), {
-                .layout = { .childGap = 8, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }
-            }) {
-                TXT("Dice:", UI_TEXT_DIM, 15);
-                if (d1 && d2) {
-                    CLAY(CLAY_ID("Die1"), { .layout = { .sizing = { CLAY_SIZING_FIXED(28), CLAY_SIZING_FIXED(28) } },
-                                            .image = { .imageData = d1 } }) {}
-                    CLAY(CLAY_ID("Die2"), { .layout = { .sizing = { CLAY_SIZING_FIXED(28), CLAY_SIZING_FIXED(28) } },
-                                            .image = { .imageData = d2 } }) {}
-                } else {
-                    TXT(fmtl("%d + %d = %d", s->die1, s->die2, s->die1 + s->die2), UI_TEXT, 15);
-                }
+            if (d1 && d2) {
+                CLAY(CLAY_ID("BDie1"), { .layout = { .sizing = { CLAY_SIZING_FIXED(22), CLAY_SIZING_FIXED(22) } },
+                                         .image = { .imageData = d1 } }) {}
+                CLAY(CLAY_ID("BDie2"), { .layout = { .sizing = { CLAY_SIZING_FIXED(22), CLAY_SIZING_FIXED(22) } },
+                                         .image = { .imageData = d2 } }) {}
+            } else {
+                TXT(fmtl("%d+%d", s->die1, s->die2), UI_ACCENT, 16);
             }
         }
+    }
+}
 
-        CLAY(CLAY_ID("HudGap2"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(10) } } }) {}
-        const char *prompt = "...";
-        if (s->gameOver) prompt = "Game over";
-        else switch (s->phase) {
-            case UI_PHASE_ROLL:    prompt = s->jailTurns > 0 ? "In jail" : "Press X to ROLL"; break;
-            case UI_PHASE_TURNEND: prompt = "Press X to end turn"; break;
-            case UI_PHASE_BUY:     prompt = "Buy or auction?"; break;
-            case UI_PHASE_BIDS:    prompt = "Auction!"; break;
-            case UI_PHASE_DEBT:    prompt = "Settle debt"; break;
-            case UI_PHASE_TRADE:   prompt = "Trade offer"; break;
-        }
-        TXT(fmtl("P%d: %s", s->controlling + 1, prompt), UI_ACCENT, 16);
-        if (!s->gameOver && (s->phase == UI_PHASE_ROLL || s->phase == UI_PHASE_TURNEND)) {
-            CLAY(CLAY_ID("HudGap3"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(6) } } }) {}
-            TXT("L2 manage   Tri trade", UI_TEXT_MUTE, 13);
-            TXT("Start pause", UI_TEXT_MUTE, 13);
-        }
+// Center-bottom action bar: the prompt for the current actor.
+static void bottom_bar(const UiSnapshot *s) {
+    const char *msg = "...";
+    if (s->gameOver) msg = "Game over";
+    else switch (s->phase) {
+        case UI_PHASE_ROLL:    msg = s->jailTurns > 0 ? "In jail" : "Press X to roll"; break;
+        case UI_PHASE_TURNEND: msg = "Press X to end turn"; break;
+        case UI_PHASE_BUY:     msg = "Buy or auction?"; break;
+        case UI_PHASE_BIDS:    msg = "Auction!"; break;
+        case UI_PHASE_DEBT:    msg = "Settle the debt"; break;
+        case UI_PHASE_TRADE:   msg = "Respond to trade"; break;
+        default: break;
+    }
+    CLAY(CLAY_ID("BottomBar"), {
+        .floating = { .attachTo = CLAY_ATTACH_TO_ROOT,
+                      .attachPoints = { .element = CLAY_ATTACH_POINT_CENTER_BOTTOM,
+                                        .parent  = CLAY_ATTACH_POINT_CENTER_BOTTOM },
+                      .offset = { 0, -6 } },
+        .layout = { .sizing = { CLAY_SIZING_FIT(0), CLAY_SIZING_FIXED(30) },
+                    .padding = { 16, 16, 4, 4 }, .childGap = 14,
+                    .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+        .backgroundColor = ui_rgba(0x14232Fe6),
+        .border = { .color = UI_BORDER, .width = CLAY_BORDER_OUTSIDE(1) }
+    }) {
+        TXT(fmtl("P%d", s->controlling + 1), ui_player_color(s->controlling), 16);
+        TXT(msg, UI_ACCENT, 16);
+        TXT("Start: pause", UI_TEXT_MUTE, 12);
     }
 }
 
@@ -215,13 +287,13 @@ void ui_render_game(const UiSnapshot *s) {
     Clay_SetLayoutDimensions((Clay_Dimensions){ 848, 512 });
     Clay_BeginLayout();
     CLAY(CLAY_ID("GameRoot"), {
-        .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) },
-                    .layoutDirection = CLAY_LEFT_TO_RIGHT }
+        .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) } }
     }) {
-        // left: transparent board area (raw board drawn underneath this frame)
-        CLAY(CLAY_ID("BoardArea"), { .layout = { .sizing = { CLAY_SIZING_FIXED(492), CLAY_SIZING_GROW(0) } } }) {}
-        hud_build(s);
-        overlay_build(s);   // floating modal on top, if any
+        // The full-screen board is drawn raw underneath; everything here floats on top.
+        top_banner(s);
+        for (int p = 0; p < s->count; ++p) player_card(s, p);
+        bottom_bar(s);
+        overlay_build(s);   // centered modal on top, if any
     }
     clay_render(Clay_EndLayout(0.0f));
 }

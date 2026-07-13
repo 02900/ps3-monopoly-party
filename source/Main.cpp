@@ -50,9 +50,10 @@ using namespace monopoly;
 static const int   SCREEN_W = 848;
 static const int   SCREEN_H = 512;
 static const u32   CLEAR     = 0xff0E1A2E;   // 0xAARRGGBB
-static const int   BOARD_X0  = 24;
-static const int   BOARD_Y0  = 26;
 static const int   CELL      = 42;           // 11x11 grid -> 462px board
+// Board is centred full-screen; the Clay HUD floats over the side margins/corners.
+static const int   BOARD_X0  = (SCREEN_W - CELL * 11) / 2;   // 193
+static const int   BOARD_Y0  = (SCREEN_H - CELL * 11) / 2;   // 25
 static const u32   BOARD_TAN = 0xffCFE0C3;
 static const u32   INK       = 0xff10202E;
 
