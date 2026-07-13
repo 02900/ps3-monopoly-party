@@ -422,6 +422,7 @@ int main(void) {
 
         // ---- menu system (title / main menu / setup / how-to) ----
         if (ui_in_menu()) {
+            audio_music(ui_in_title() ? MUS_TITLE : MUS_MENU);
             ui_begin_frame(CLEAR);
             ui_menu_bg();                    // full-screen art under the Clay menu
             reset_ttf_frame();
@@ -537,7 +538,7 @@ int main(void) {
                     if (eX) { iface.end_turn(c); advanced = 1; }
                     break;
                 case TurnPhase::WaitingForBuyPropertyInput:
-                    if (eX)      { iface.buy_property(c);     advanced = 1; audio_play_blip(); }
+                    if (eX)      { iface.buy_property(c);     advanced = 1; audio_sfx(SFX_BUY); }
                     else if (eO) { iface.auction_property(c); advanced = 1; }
                     break;
                 case TurnPhase::WaitingForBids: {
@@ -584,6 +585,13 @@ int main(void) {
         fill_snapshot(snap, s, iface.player_count(), mgmtOpen, mgmtSel,
                       tradeOpen, tradeTarget, tradeDeedSel, tradeCash, bidAmount, paused);
         snap.tokenTheme = gameTheme;
+
+        // in-game music by phase: win fanfare / auction / jail / calm default
+        int mtrack = MUS_INGAME;
+        if (snap.gameOver)                  mtrack = MUS_WIN;
+        else if (snap.phase == UI_PHASE_BIDS) mtrack = MUS_AUCTION;
+        else if (snap.jailTurns > 0)        mtrack = MUS_JAIL;
+        audio_music(mtrack);
 
         ui_begin_frame(CLEAR);
         reset_ttf_frame();                       // one TTF reset covers board text + Clay

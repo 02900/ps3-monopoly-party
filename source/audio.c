@@ -18,8 +18,10 @@
 #define SR 22050   /* synthesis sample rate */
 
 static int     audio_ok = 0;
-static SAMPLE *s_blip = NULL, *s_music = NULL;
+static SAMPLE *s_music[MUS_COUNT];
+static SAMPLE *s_sfx[SFX_COUNT];
 static SBYTE   music_voice = -1;
+static int     cur_track   = -1;
 
 /* ---- in-memory MREADER (lets MikMod parse a WAV from a RAM buffer) -------- */
 typedef struct { MREADER core; const unsigned char *data; long size, pos; } MemReader;
@@ -101,24 +103,85 @@ static SAMPLE *load_pcm(const SWORD *pcm, int n)
 	return s;
 }
 
-static SWORD g_scratch[SR * 3];   /* up to 3 s */
+#define SCRATCH (SR * 8)          /* up to 8 s per track */
+static SWORD g_scratch[SCRATCH];
 
-static SAMPLE *synth_blip(void)   /* a quick upward chirp */
+/* Build a single-voice square-wave track from parallel freq (Hz, 0=rest) and
+ * duration (ms) arrays; `gap` ms of silence is carved out of each note's tail
+ * for articulation. Returns an in-memory WAV SAMPLE (caller sets loop flags). */
+static SAMPLE *synth_track(const int *mf, const int *ml, int count, int amp, int gap)
 {
-	double ph = 0; int n = seg(g_scratch, SR * 3, 0, 440, 990, 90, 8000, &ph);
+	double ph = 0; int n = 0;
+	for (int k = 0; k < count; k++) {
+		int dur = ml[k] - gap; if (dur < 1) dur = 1;
+		n = seg(g_scratch, SCRATCH, n, mf[k], mf[k], dur, amp, &ph);
+		if (gap) n = seg(g_scratch, SCRATCH, n, 0, 0, gap, 0, &ph);
+	}
 	return load_pcm(g_scratch, n);
 }
-static SAMPLE *synth_music(void)  /* a short cheerful C-major square-wave loop */
-{
-	static const int mf[16] = { 523, 659, 784, 1047, 784, 659, 587, 523,
-	                            587, 659, 698, 784, 659, 523, 587, 0 };
-	static const int ml[16] = { 150,150,150,150,150,150,150,300,
-	                            150,150,150,150,150,150,300,150 };
+
+/* ---- music tracks (melodies from docs/audio.md) -------------------------- */
+/* title: C major, grand rising fanfare that rings out (~4 s). */
+static SAMPLE *synth_title(void) {
+	static const int f[] = { 262,330,392,523, 392, 330,262, 0 };
+	static const int l[] = { 300,300,300,300, 600, 300,300, 700 };
+	return synth_track(f, l, 8, 5200, 20);
+}
+/* menu: C major, bouncy two bars + a turnaround (~3 s loop). */
+static SAMPLE *synth_menu(void) {
+	static const int f[] = { 330,392,330,262, 294,349,294,247, 392,330,262, 0 };
+	static const int l[] = { 180,180,180,180, 180,180,180,180, 240,240,360, 300 };
+	return synth_track(f, l, 12, 4600, 22);
+}
+/* ingame: A minor, sparse walking bass + airy melody stabs (~6 s loop). */
+static SAMPLE *synth_ingame(void) {
+	static const int f[] = { 110,0,440,0, 165,0,523,0, 110,0,494,0, 131,0,392,0 };
+	static const int l[] = { 400,200,300,300, 400,200,300,300, 400,200,300,300, 400,200,300,500 };
+	return synth_track(f, l, 16, 3600, 16);
+}
+/* auction: E minor, fast tense ostinato (~3 s loop). */
+static SAMPLE *synth_auction(void) {
+	static const int f[] = { 330,330,349,330,294, 330,330,349,330,294,
+	                         330,330,349,330,294, 330,330,349,330,294, 330,330,349,330,294 };
+	static const int l[] = { 120,120,120,120,120, 120,120,120,120,120,
+	                         120,120,120,120,120, 120,120,120,120,120, 120,120,120,120,120 };
+	return synth_track(f, l, 25, 4200, 14);
+}
+/* jail: C minor, comedic descending "uh-oh" (~3 s loop). */
+static SAMPLE *synth_jail(void) {
+	static const int f[] = { 392,349,311,294,262, 0, 262,196, 0 };
+	static const int l[] = { 250,250,250,250,400, 150, 300,300, 300 };
+	return synth_track(f, l, 9, 4600, 18);
+}
+/* win: C major triumphant fanfare + flourish (one-shot, ~3 s). */
+static SAMPLE *synth_win(void) {
+	static const int f[] = { 523,523,523, 659, 784, 784,698,659,698,784, 0 };
+	static const int l[] = { 150,150,150, 300, 500, 200,200,200,200,600, 300 };
+	return synth_track(f, l, 11, 5600, 16);
+}
+
+/* ---- SFX ----------------------------------------------------------------- */
+static SAMPLE *synth_roll(void) {  /* quick upward chirp */
+	double ph = 0; int n = seg(g_scratch, SCRATCH, 0, 440, 990, 90, 8000, &ph);
+	return load_pcm(g_scratch, n);
+}
+static SAMPLE *synth_buy(void) {   /* two-note C5->E5 "ka-ching" */
 	double ph = 0; int n = 0;
-	for (int k = 0; k < 16; k++) {
-		n = seg(g_scratch, SR * 3, n, mf[k], mf[k], ml[k] - 18, 5200, &ph);
-		n = seg(g_scratch, SR * 3, n, 0, 0, 18, 0, &ph);   /* tiny gap */
-	}
+	n = seg(g_scratch, SCRATCH, n, 523, 523, 70, 8000, &ph);
+	n = seg(g_scratch, SCRATCH, n, 659, 659, 130, 8000, &ph);
+	return load_pcm(g_scratch, n);
+}
+static SAMPLE *synth_cash(void) {  /* rising E5 G5 C6 sparkle */
+	double ph = 0; int n = 0;
+	n = seg(g_scratch, SCRATCH, n, 659, 659, 70, 7000, &ph);
+	n = seg(g_scratch, SCRATCH, n, 784, 784, 70, 7000, &ph);
+	n = seg(g_scratch, SCRATCH, n, 1047, 1047, 120, 7000, &ph);
+	return load_pcm(g_scratch, n);
+}
+static SAMPLE *synth_error(void) { /* low descending buzz */
+	double ph = 0; int n = 0;
+	n = seg(g_scratch, SCRATCH, n, 220, 220, 90, 7000, &ph);
+	n = seg(g_scratch, SCRATCH, n, 175, 175, 140, 7000, &ph);
 	return load_pcm(g_scratch, n);
 }
 
@@ -137,17 +200,26 @@ void audio_init(void)
 	MikMod_SetNumVoices(0, 8);
 	if (MikMod_EnableOutput()) { MikMod_Exit(); return; }
 
-	s_blip  = synth_blip();
-	s_music = synth_music();
-	if (s_music) {
-		s_music->flags    |= SF_LOOP;
-		s_music->loopstart = 0;
-		s_music->loopend   = s_music->length;
-		music_voice = Sample_Play(s_music, 0, SFX_CRITICAL);      /* won't be stolen */
-		if (music_voice >= 0) Voice_SetVolume(music_voice, 96);   /* duck under SFX  */
+	s_music[MUS_TITLE]   = synth_title();
+	s_music[MUS_MENU]    = synth_menu();
+	s_music[MUS_INGAME]  = synth_ingame();
+	s_music[MUS_AUCTION] = synth_auction();
+	s_music[MUS_JAIL]    = synth_jail();
+	s_music[MUS_WIN]     = synth_win();
+	/* loop every track except the WIN fanfare (one-shot on game over) */
+	for (int t = 0; t < MUS_COUNT; t++) {
+		if (!s_music[t] || t == MUS_WIN) continue;
+		s_music[t]->flags    |= SF_LOOP;
+		s_music[t]->loopstart = 0;
+		s_music[t]->loopend   = s_music[t]->length;
 	}
 
-	audio_ok = 1;
+	s_sfx[SFX_ROLL]  = synth_roll();
+	s_sfx[SFX_BUY]   = synth_buy();
+	s_sfx[SFX_CASH]  = synth_cash();
+	s_sfx[SFX_ERROR] = synth_error();
+
+	audio_ok = 1;   /* audio_music() is driven by the game loop from here */
 }
 
 void audio_update(void)   { if (audio_ok) MikMod_Update(); }
@@ -157,10 +229,26 @@ void audio_shutdown(void)
 	if (!audio_ok) return;
 	audio_ok = 0;
 	if (music_voice >= 0) Voice_Stop(music_voice);
-	if (s_music) Sample_Free(s_music);
-	if (s_blip)  Sample_Free(s_blip);
+	for (int t = 0; t < MUS_COUNT; t++) if (s_music[t]) Sample_Free(s_music[t]);
+	for (int i = 0; i < SFX_COUNT; i++) if (s_sfx[i])   Sample_Free(s_sfx[i]);
 	MikMod_DisableOutput();
 	MikMod_Exit();
 }
 
-void audio_play_blip(void) { if (audio_ok && s_blip) Sample_Play(s_blip, 0, 0); }
+void audio_music(int track)
+{
+	if (!audio_ok || track < 0 || track >= MUS_COUNT) return;
+	if (track == cur_track || !s_music[track]) return;
+	cur_track = track;
+	if (music_voice >= 0) Voice_Stop(music_voice);
+	music_voice = Sample_Play(s_music[track], 0, SFX_CRITICAL);   /* won't be stolen */
+	if (music_voice >= 0) Voice_SetVolume(music_voice, 96);       /* duck under SFX  */
+}
+
+void audio_sfx(int id)
+{
+	if (audio_ok && id >= 0 && id < SFX_COUNT && s_sfx[id])
+		Sample_Play(s_sfx[id], 0, 0);
+}
+
+void audio_play_blip(void) { audio_sfx(SFX_ROLL); }

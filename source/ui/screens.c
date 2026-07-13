@@ -17,6 +17,7 @@ static ClayNavRepeat g_repV, g_repH;
 static UiGameConfig  g_cfg = { 4, { 0, 0, 0, 0 }, { 0, 1, 2, 3 } };
 
 int  ui_in_menu(void)   { return !g_inGame; }
+int  ui_in_title(void)  { return !g_inGame && g_screen == SCR_TITLE; }
 void ui_goto_menu(void) { g_inGame = 0; g_screen = SCR_MENU; g_nav.has_focus = 0; }
 void ui_force_game(void) { g_inGame = 1; }
 

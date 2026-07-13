@@ -89,6 +89,8 @@ void ui_render_game(const UiSnapshot *snap);
 
 // Are we in the menu system (title/menu/setup/...) rather than in a match?
 int  ui_in_menu(void);
+// Are we specifically on the title/splash screen (for the title music track)?
+int  ui_in_title(void);
 // Leave a match back to the main menu (e.g. pause -> quit to menu).
 void ui_goto_menu(void);
 // Force into a match (used by the nettest harness so `newgame` enters the game).
