@@ -34,7 +34,7 @@ int ui_img_token(int theme, int token) {
 // ---- embedded PNGs (bin2o: data/foo.png -> foo_png / foo_png_size) ----------
 #define PNG(sym) extern const unsigned char sym##_png[]; extern const unsigned int sym##_png_size;
 PNG(logo) PNG(menu_bg) PNG(board_face)
-PNG(bg_title) PNG(bg_menu) PNG(bg_howto)
+PNG(bg_title) PNG(bg_menu) PNG(bg_howto) PNG(bg_ingame)
 PNG(dice_1) PNG(dice_2) PNG(dice_3) PNG(dice_4) PNG(dice_5) PNG(dice_6)
 PNG(icon_jail) PNG(icon_tax) PNG(icon_rr) PNG(icon_util)
 PNG(tok_classic_car) PNG(tok_classic_boot) PNG(tok_classic_hat)
@@ -65,9 +65,10 @@ static void load_slot(int id, const unsigned char *buf, unsigned int size) {
 void ui_images_load(void) {
     LOAD(UI_IMG_LOGO,     logo);
     LOAD(UI_IMG_BG,       menu_bg);
-    LOAD(UI_IMG_BG_TITLE, bg_title);
-    LOAD(UI_IMG_BG_MENU,  bg_menu);
-    LOAD(UI_IMG_BG_HOWTO, bg_howto);
+    LOAD(UI_IMG_BG_TITLE,  bg_title);
+    LOAD(UI_IMG_BG_MENU,   bg_menu);
+    LOAD(UI_IMG_BG_HOWTO,  bg_howto);
+    LOAD(UI_IMG_BG_INGAME, bg_ingame);
     LOAD(UI_IMG_BOARD,    board_face);
 
     LOAD(UI_IMG_DICE + 0, dice_1); LOAD(UI_IMG_DICE + 1, dice_2); LOAD(UI_IMG_DICE + 2, dice_3);
@@ -154,6 +155,8 @@ int ui_draw_cover(int id) {
     ya2d_drawTextureZ((ya2d_Texture *) g_images[id].tex, x, y, 0, scale);
     return 1;
 }
+
+void ui_game_bg(void) { ui_draw_cover(UI_IMG_BG_INGAME); }
 
 int ui_draw_token(int theme, int token, int x, int y, int size) {
     return draw_image(ui_img_token(theme, token), x, y, size);

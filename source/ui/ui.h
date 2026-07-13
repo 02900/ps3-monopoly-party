@@ -70,6 +70,10 @@ void ui_images_load(void);
 // the transparent-root menu shows it through. No-op if the art isn't loaded.
 void ui_menu_bg(void);
 
+// Draw the in-game tabletop backdrop (cover fit) behind the board. Call in a
+// match after ui_begin_frame() and before draw_board(). No-op if not loaded.
+void ui_game_bg(void);
+
 // Draw a player's token sprite with ya2d at (x,y) scaled to `size`px (for the raw
 // board tokens). Returns 0 if that sprite isn't loaded, so the caller can fall back
 // to a coloured square. Must run inside the tiny3d 2D frame (blending on).

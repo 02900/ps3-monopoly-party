@@ -120,44 +120,54 @@ static SAMPLE *synth_track(const int *mf, const int *ml, int count, int amp, int
 	return load_pcm(g_scratch, n);
 }
 
-/* ---- music tracks (melodies from docs/audio.md) -------------------------- */
-/* title: C major, grand rising fanfare that rings out (~4 s). */
+/* Strategy / trading-card-game (Yu-Gi-Oh-ish) flavour: minor keys, arpeggiated
+ * chord sweeps over the i-VI-III-VII progression, driving and a bit dramatic. */
+
+/* title: epic A-minor arpeggio sweep (Am-F-C-G) rising to a held tonic (~4 s). */
 static SAMPLE *synth_title(void) {
-	static const int f[] = { 262,330,392,523, 392, 330,262, 0 };
-	static const int l[] = { 300,300,300,300, 600, 300,300, 700 };
-	return synth_track(f, l, 8, 5200, 20);
+	static const int f[] = { 220,262,330,440, 175,220,262,349,   /* Am, F  */
+	                         262,330,392,523, 196,247,294,392,   /* C,  G  */
+	                         440, 0 };                            /* hold A4 */
+	static const int l[] = { 190,190,190,190, 190,190,190,190,
+	                         190,190,190,190, 190,190,190,190,
+	                         760, 300 };
+	return synth_track(f, l, 18, 5000, 16);
 }
-/* menu: C major, bouncy two bars + a turnaround (~3 s loop). */
+/* menu: driving Am-F-C-G arpeggio ostinato, duel-menu energy (~2.4 s loop). */
 static SAMPLE *synth_menu(void) {
-	static const int f[] = { 330,392,330,262, 294,349,294,247, 392,330,262, 0 };
-	static const int l[] = { 180,180,180,180, 180,180,180,180, 240,240,360, 300 };
-	return synth_track(f, l, 12, 4600, 22);
+	static const int f[] = { 220,330,440,330, 175,262,349,262,   /* Am, F  */
+	                         262,392,523,392, 196,294,392,294 };  /* C,  G  */
+	static const int l[] = { 150,150,150,150, 150,150,150,150,
+	                         150,150,150,150, 150,150,150,150 };
+	return synth_track(f, l, 16, 4400, 14);
 }
-/* ingame: A minor, sparse walking bass + airy melody stabs (~6 s loop). */
+/* ingame: slow, tense A-minor arpeggios with breathing room (~5 s loop). */
 static SAMPLE *synth_ingame(void) {
-	static const int f[] = { 110,0,440,0, 165,0,523,0, 110,0,494,0, 131,0,392,0 };
-	static const int l[] = { 400,200,300,300, 400,200,300,300, 400,200,300,300, 400,200,300,500 };
-	return synth_track(f, l, 16, 3600, 16);
+	static const int f[] = { 110,165,220,262, 175,220,262,0,     /* Am, F.  */
+	                         131,196,262,330, 98,147,196,0 };     /* C,  G.  */
+	static const int l[] = { 260,260,260,260, 260,260,260,300,
+	                         260,260,260,260, 260,260,260,400 };
+	return synth_track(f, l, 16, 3400, 16);
 }
-/* auction: E minor, fast tense ostinato (~3 s loop). */
+/* auction: fast rising E-minor arpeggio with a moving bass — climax tension (~2 s). */
 static SAMPLE *synth_auction(void) {
-	static const int f[] = { 330,330,349,330,294, 330,330,349,330,294,
-	                         330,330,349,330,294, 330,330,349,330,294, 330,330,349,330,294 };
-	static const int l[] = { 120,120,120,120,120, 120,120,120,120,120,
-	                         120,120,120,120,120, 120,120,120,120,120, 120,120,120,120,120 };
-	return synth_track(f, l, 25, 4200, 14);
+	static const int f[] = { 165,330,494,330, 165,330,494,330,   /* Em x2 */
+	                         175,349,523,349, 196,392,587,392 };  /* F, G  */
+	static const int l[] = { 110,110,110,110, 110,110,110,110,
+	                         110,110,110,110, 110,110,110,110 };
+	return synth_track(f, l, 16, 4200, 12);
 }
-/* jail: C minor, comedic descending "uh-oh" (~3 s loop). */
+/* jail: ominous "trap card" descent + low pulse, still a touch comedic (~3 s). */
 static SAMPLE *synth_jail(void) {
-	static const int f[] = { 392,349,311,294,262, 0, 262,196, 0 };
-	static const int l[] = { 250,250,250,250,400, 150, 300,300, 300 };
-	return synth_track(f, l, 9, 4600, 18);
+	static const int f[] = { 392,349,311,294,262, 131, 0, 131,98, 0 };
+	static const int l[] = { 220,220,220,220,350, 250, 120, 250,300, 300 };
+	return synth_track(f, l, 10, 4400, 16);
 }
-/* win: C major triumphant fanfare + flourish (one-shot, ~3 s). */
+/* win: big triumphant victory fanfare + flourish (one-shot, ~3 s). */
 static SAMPLE *synth_win(void) {
-	static const int f[] = { 523,523,523, 659, 784, 784,698,659,698,784, 0 };
-	static const int l[] = { 150,150,150, 300, 500, 200,200,200,200,600, 300 };
-	return synth_track(f, l, 11, 5600, 16);
+	static const int f[] = { 523,659,784,1047, 784,880,784,659,523, 0 };
+	static const int l[] = { 200,200,200,400, 200,200,200,200,700, 300 };
+	return synth_track(f, l, 10, 5600, 16);
 }
 
 /* ---- SFX ----------------------------------------------------------------- */

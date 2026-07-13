@@ -162,6 +162,23 @@ def build_manifest() -> list[Asset]:
         ),
         engine="grok",
     ))
+    # In-game: the real board renders on top and fills the centre, so this is a purely
+    # ABSTRACT decorative backdrop — NOboard, NO props (they clashed with the real
+    # board). Just an elegant dark texture with subtle motifs framing the play area.
+    assets.append(Asset(
+        id="bg_ingame", out="data/bg_ingame.png", width=1280, height=720, rgba=False,
+        prompt=(
+            "Abstract decorative background for a board-game screen. Deep navy gradient "
+            "with a soft radial glow toward the centre and a gentle vignette; scattered, "
+            "softly-blurred translucent diamond and rounded-square shapes in muted "
+            "Monopoly property colours (brown, light blue, magenta, orange, red, yellow, "
+            "green, blue), a few thin gold art-deco filigree lines and small bokeh "
+            "sparkles, tasteful and calm. STRICTLY NO game board, NO grid, NO tokens, NO "
+            "houses, NO dice, NO people, NO text — purely an abstract decorative texture. "
+            + BG_TAIL
+        ),
+        engine="grok",
+    ))
     assets.append(Asset(
         id="board_face", out="data/board_face.png", width=512, height=512, rgba=True,
         prompt=(

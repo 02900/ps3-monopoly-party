@@ -594,6 +594,7 @@ int main(void) {
         audio_music(mtrack);
 
         ui_begin_frame(CLEAR);
+        ui_game_bg();                            // tabletop backdrop behind the board
         reset_ttf_frame();                       // one TTF reset covers board text + Clay
         set_ttf_window(0, 0, SCREEN_W, SCREEN_H, WIN_SKIP_LF);
         draw_board(s, iface.player_count(), gameTheme);   // raw scene, under the Clay UI

@@ -165,7 +165,8 @@ static void build_menu(int cross, UiAction *result) {
             .backgroundColor = ui_rgba(0x0E1B29e0),
             .border = { .color = UI_BORDER, .width = CLAY_BORDER_OUTSIDE(2) }
         }) {
-            if (menu_item(CLAY_ID("MenuNew"),  "New Game",    cross)) g_screen = SCR_SETUP;
+            // reset focus on entry so the first row is selected by default
+            if (menu_item(CLAY_ID("MenuNew"),  "New Game",    cross)) { g_screen = SCR_SETUP; g_nav.has_focus = 0; }
             if (menu_item(CLAY_ID("MenuHow"),  "How to Play", cross)) g_screen = SCR_HOWTO;
             if (menu_item(CLAY_ID("MenuQuit"), "Quit",        cross)) *result = UI_ACT_QUIT;
         }
@@ -174,7 +175,10 @@ static void build_menu(int cross, UiAction *result) {
 }
 
 static void build_setup(int hdir, int cross, UiAction *result) {
-    char players[32];
+    // NOTE: these must be static — Clay only copies the *pointer* (ui_str), and
+    // clay_render() reads it after build_setup() returns, so a stack buffer would
+    // dangle (rendered as garbage like "C/"). One frame at a time, so static is safe.
+    static char players[32];
     snprintf(players, sizeof players, "Players:   < %d >", g_cfg.playerCount);
 
     CLAY(CLAY_ID("Root"), {
@@ -212,7 +216,7 @@ static void build_setup(int hdir, int cross, UiAction *result) {
         }
 
         // Theme row (focusable; Left/Right cycle the token theme)
-        char themerow[40];
+        static char themerow[40];
         snprintf(themerow, sizeof themerow, "Theme:   < %s >", ui_theme_name(g_theme));
         clay_nav_add(&g_nav, CLAY_ID("SetupTheme"));
         int tf = clay_nav_is_focused(&g_nav, CLAY_ID("SetupTheme"));

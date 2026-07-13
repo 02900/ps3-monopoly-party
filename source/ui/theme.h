@@ -17,6 +17,7 @@ enum {
     UI_IMG_BG_TITLE,                     // per-screen menu backgrounds
     UI_IMG_BG_MENU,
     UI_IMG_BG_HOWTO,
+    UI_IMG_BG_INGAME,                    // tabletop surface behind the board
     UI_IMG_BOARD,                        // board centre art
     UI_IMG_DICE,                         // + face 0..5  (dice_1..6)
     UI_IMG_ICON  = UI_IMG_DICE + 6,      // + 0 jail / 1 tax / 2 rr / 3 util

@@ -26,6 +26,13 @@ F4 349, G4 392, A4 440, B4 494, C5 523, E5 659, G5 784. `0` = rest.
 ⚠️ Hand-built WAV bytes must be **little-endian** (the PPU is big-endian) — use the
 existing `put_le16/32` helpers.
 
+## Style
+
+Target a **strategy / trading-card-game (Yu-Gi-Oh-ish) duel** feel: minor keys,
+**arpeggiated chord sweeps** over an `i–VI–III–VII` progression (e.g. Am–F–C–G),
+driving and a touch dramatic rather than nursery-bright. Still square-wave, still
+short loops. The implemented tracks in `audio.c` follow this.
+
 ## Tracks (per screen)
 
 Notation below is melody in note names with durations; keep everything square-wave,
